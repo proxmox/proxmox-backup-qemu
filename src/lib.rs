@@ -97,13 +97,11 @@ fn backup_worker_task(mut rx: Receiver<BackupMessage>, host: &str) -> Result<(),
 // The C interface
 
 #[repr(C)]
-pub struct BackupHandle {
-    task: Box<BackupTask>,
-}
+pub struct ProxmoxBackupHandle {}
 
 
 #[no_mangle]
-pub unsafe extern "C" fn connect() -> *mut BackupHandle {
+pub unsafe extern "C" fn proxmox_backup_connect() -> *mut ProxmoxBackupHandle {
 
     println!("Hello");
 
@@ -111,15 +109,15 @@ pub unsafe extern "C" fn connect() -> *mut BackupHandle {
         Ok(task) => {
             let tmp = Box::new(task);
             let test = Box::into_raw(tmp);
-            test as * mut BackupHandle
+            test as * mut ProxmoxBackupHandle
         }
         Err(err) => std::ptr::null_mut(),
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn write_data_async(
-    handle: *mut BackupHandle,
+pub unsafe extern "C" fn proxmox_backup_write_data_async(
+    handle: *mut ProxmoxBackupHandle,
     data: *const u8,
     size: u64,
     callback: extern "C" fn(*mut libc::c_void),
@@ -127,20 +125,23 @@ pub unsafe extern "C" fn write_data_async(
 ) {
 
     let msg = BackupMessage::WriteData { data, size , callback, callback_data };
+
+    let task = handle as * mut BackupTask;
     
-    let _res = (*handle).task.tx.send(msg); // fixme: log errors
+    let _res = (*task).tx.send(msg); // fixme: log errors
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn disconnect(handle: *mut BackupHandle) {
+pub unsafe extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 
     println!("diconnect");
 
-    let mut handle = Box::from_raw(handle);
+    let task = handle as * mut BackupTask;
+    let mut task = Box::from_raw(task); // take ownership
    
-    let _res = handle.task.tx.send(BackupMessage::End); // fixme: log errors
+    let _res = task.tx.send(BackupMessage::End); // fixme: log errors
     
-    match handle.task.worker.join() {
+    match task.worker.join() {
         Ok(result) => {
             match result {
                 Ok(()) => {
@@ -156,6 +157,6 @@ pub unsafe extern "C" fn disconnect(handle: *mut BackupHandle) {
         }
     }
     
-    //drop(handle);
+    //drop(task);
 }
 
