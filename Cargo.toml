@@ -1,0 +1,24 @@
+[package]
+name = "proxmox-backup-qemu"
+version = "0.1.0"
+authors = [
+    "Dietmar Maurer <dietmar@proxmox.com>",
+    "Wolfgang Bumiller <w.bumiller@proxmox.com>",
+]
+edition = "2018"
+build = "build.rs"
+
+[lib]
+crate-type = ['lib', 'cdylib']
+
+[build-dependencies]
+cbindgen = "0.9.1"
+
+[dependencies]
+libc = "0.2"
+proxmox-backup = { path = "../proxmox-backup" }
+chrono = "0.4" # Date and time library for Rust
+failure = "0.1"
+futures-preview = "0.3.0-alpha"
+tokio = { version = "0.2.0-alpha.4" }
+
