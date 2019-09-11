@@ -79,12 +79,10 @@ fn backup_worker_task(mut rx: Receiver<BackupMessage>, host: &str) -> Result<(),
                 BackupMessage::WriteData { data, size, callback, callback_data } => {
                     println!("write {} bytes", size);
 
- 
-                    // do something async
-                    let res = std::panic::catch_unwind(|| {
-
-                        
-                    });
+                    for i in 0..10 {
+                        println!("Delay loop {}", i);
+                        tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(1, 0)).await;
+                    }
   
                     // fixme: error handling 
                     callback(callback_data);
