@@ -1,0 +1,6 @@
+proxmox-backup-qemu (0.1-1) unstable; urgency=medium
+
+  * initial packaging
+
+ -- Proxmox Support Team <support@proxmox.com>  Wed, 11 Sep 2019 12:05:02 +0200
+
