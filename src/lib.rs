@@ -74,6 +74,7 @@ fn backup_worker_task(mut rx: Receiver<BackupMessage>, host: &str) -> Result<(),
 
             match msg {
                 BackupMessage::End => {
+                    println!("worker got end mesage");
                     break;
                 }
                 BackupMessage::WriteData { data, size, callback, callback_data } => {
@@ -89,6 +90,7 @@ fn backup_worker_task(mut rx: Receiver<BackupMessage>, host: &str) -> Result<(),
                 }
             }
         }
+        println!("worker end loop");
     });
 
     runtime.run()
@@ -139,8 +141,10 @@ pub unsafe extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHan
     let task = handle as * mut BackupTask;
     let mut task = Box::from_raw(task); // take ownership
    
+    println!("send end");
     let _res = task.tx.send(BackupMessage::End); // fixme: log errors
     
+    println!("try join");
     match task.worker.join() {
         Ok(result) => {
             match result {
