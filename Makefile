@@ -5,7 +5,7 @@ PKGREL=1
 ARCH:=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
 GITVERSION:=$(shell git rev-parse HEAD)
 
-DEB=${PACKAGE}_${PKGVER}-${PKGREL}_${ARCH}.deb
+DEBS=${PACKAGE}_${PKGVER}-${PKGREL}_${ARCH}.deb ${PACKAGE}-dev_${PKGVER}-${PKGREL}_${ARCH}.deb
 
 DESTDIR=
 
@@ -29,13 +29,13 @@ build:
 .PHONY: install
 install: target/release/libproxmox_backup_qemu.so
 	install -D -m 0755 target/release/libproxmox_backup_qemu.so ${DESTDIR}/usr/lib//libproxmox_backup_qemu.so.0
-
+	ln -s ${DESTDIR}/usr/lib//libproxmox_backup_qemu.so.0 ${DESTDIR}/usr/lib//libproxmox_backup_qemu.so
 
 .PHONY: deb
-deb: $(DEB)
-$(DEB): build
+deb: $(DEBS)
+$(DEBS): build
 	cd build; dpkg-buildpackage -b -us -uc --no-pre-clean
-	lintian $(DEB)
+	lintian $(DEBS)
 
 simpletest: simpletest.c proxmox-backup-qemu.h
 	gcc test.c -o simpletest -lc  -Wl,-rpath=./target/debug -L ./target/debug/ -l proxmox_backup_qemu
@@ -48,5 +48,5 @@ clean:
 	find . -name '*~' -exec rm {} ';'
 
 .PHONY: dinstall
-dinstall: ${DEB}
-	dpkg -i ${DEB}
+dinstall: ${DEBS}
+	dpkg -i ${DEBS}
