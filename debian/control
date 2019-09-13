@@ -6,7 +6,7 @@ Build-Depends: debhelper (>= 10),
 Standards-Version: 3.9.5
 Homepage: https://www.proxmox.com
 
-Package: libproxmox-backup-qemu-dev
+Package: libproxmox-backup-qemu
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
 Description: Proxmox Backup Server client library for QEMU

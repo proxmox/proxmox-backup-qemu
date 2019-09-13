@@ -1,4 +1,4 @@
-PACKAGE=libproxmox-backup-qemu-dev
+PACKAGE=libproxmox-backup-qemu
 PKGVER=0.1
 PKGREL=1
 
@@ -30,8 +30,8 @@ $(DEB): build
 	cd build; dpkg-buildpackage -b -us -uc --no-pre-clean
 	lintian $(DEB)
 
-test: test.c proxmox-backup-qemu.h
-	gcc test.c -o test -lc  -Wl,-rpath=./target/debug -L ./target/debug/ -l proxmox_backup_qemu
+simpletest: simpletest.c proxmox-backup-qemu.h
+	gcc test.c -o simpletest -lc  -Wl,-rpath=./target/debug -L ./target/debug/ -l proxmox_backup_qemu
 
 distclean: clean
 
