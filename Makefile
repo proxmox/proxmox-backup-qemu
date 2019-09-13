@@ -30,6 +30,9 @@ $(DEB): build
 	cd build; dpkg-buildpackage -b -us -uc --no-pre-clean
 	lintian $(DEB)
 
+test: test.c proxmox-backup-qemu.h
+	gcc test.c -o test -lc  -Wl,-rpath=./target/debug -L ./target/debug/ -l proxmox_backup_qemu
+
 distclean: clean
 
 clean:
