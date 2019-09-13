@@ -1,7 +1,6 @@
 use failure::*;
-use std::sync::Arc;
 use std::thread::JoinHandle;
-use tokio::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender, Receiver};
 
 //use futures::{future, Future, Stream};
 use tokio::runtime::current_thread::{Runtime, RunError};
@@ -13,7 +12,7 @@ use chrono::{Utc, TimeZone};
 
 
 struct BackupTask {
-    worker: JoinHandle<Result<(), RunError>>,
+    worker: JoinHandle<Result<(), Error>>,
     tx: Sender<BackupMessage>,
 //    runtime: Runtime,
 //    client: Arc<BackupClient>,
@@ -40,22 +39,22 @@ impl BackupTask {
         let store = "store2";
         let backup_id = "99";
         let verbose = false;
-        
+
         let backup_time = Utc.timestamp(Utc::now().timestamp(), 0);
 
-        let (tx, rx) = channel(1);
-        
+        let (tx, rx) = channel();
+
         let worker = std::thread::spawn(move ||  {
             backup_worker_task(rx, host)
         });
-        
+
         /*
         let client = HttpClient::new(host, user)?;
 
         let client = runtime.block_on(
             client.start_backup(store, "vm", backup_id, backup_time, verbose))?;
          */
-        
+
         Ok(BackupTask {
             worker,
             tx,
@@ -64,36 +63,39 @@ impl BackupTask {
 
 }
 
-fn backup_worker_task(mut rx: Receiver<BackupMessage>, host: &str) -> Result<(), RunError>  {
+fn backup_worker_task(rx: Receiver<BackupMessage>, host: &str) -> Result<(), Error>  {
 
     let mut runtime = Runtime::new().unwrap(); // fixme
 
-    runtime.spawn(async move {
-        
-        while let Some(msg) = rx.recv().await {
+    loop {
+        let msg = rx.recv()?;
 
-            match msg {
-                BackupMessage::End => {
-                    println!("worker got end mesage");
-                    break;
-                }
-                BackupMessage::WriteData { data, size, callback, callback_data } => {
-                    println!("write {} bytes", size);
+        match msg {
+            BackupMessage::End => {
+                println!("worker got end mesage");
+                break;
+            }
+            BackupMessage::WriteData { data, size, callback, callback_data } => {
+                println!("write {} bytes", size);
 
+                runtime.block_on(async move {
                     for i in 0..10 {
                         println!("Delay loop {}", i);
                         tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(1, 0)).await;
                     }
-  
-                    // fixme: error handling 
+
+                    // fixme: error handling
                     callback(callback_data);
-                }
+                });
             }
         }
-        println!("worker end loop");
-    });
+    }
 
-    runtime.run()
+    println!("worker end loop");
+
+    //    runtime.run()
+
+    Ok(())
 }
 
 // The C interface
@@ -129,7 +131,7 @@ pub unsafe extern "C" fn proxmox_backup_write_data_async(
     let msg = BackupMessage::WriteData { data, size , callback, callback_data };
 
     let task = handle as * mut BackupTask;
-    
+
     let _res = (*task).tx.send(msg); // fixme: log errors
 }
 
@@ -140,10 +142,10 @@ pub unsafe extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHan
 
     let task = handle as * mut BackupTask;
     let mut task = Box::from_raw(task); // take ownership
-   
+
     println!("send end");
     let _res = task.tx.send(BackupMessage::End); // fixme: log errors
-    
+
     println!("try join");
     match task.worker.join() {
         Ok(result) => {
@@ -160,7 +162,6 @@ pub unsafe extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHan
            println!("worker paniced with error: {:?}", err);
         }
     }
-    
+
     //drop(task);
 }
-
