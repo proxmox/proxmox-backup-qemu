@@ -12,4 +12,6 @@ fn main() {
         .generate()
         .unwrap()
         .write_to_file("proxmox-backup-qemu.h");
+
+    println!("cargo:rustc-cdylib-link-arg=-Wl,-soname,libproxmox_backup_qemu.so.0");
 }

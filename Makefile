@@ -1,4 +1,4 @@
-PACKAGE=libproxmox-backup-qemu
+PACKAGE=libproxmox-backup-qemu0
 PKGVER=0.1
 PKGREL=1
 
@@ -6,6 +6,8 @@ ARCH:=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
 GITVERSION:=$(shell git rev-parse HEAD)
 
 DEB=${PACKAGE}_${PKGVER}-${PKGREL}_${ARCH}.deb
+
+DESTDIR=
 
 ifeq ($(BUILD_MODE), release)
 CARGO_BUILD_ARGS += --release
@@ -23,6 +25,11 @@ build:
 	rm -rf build
 	cargo build --release
 	rsync -a debian Makefile Cargo.toml Cargo.lock build.rs proxmox-backup-qemu.h src target build/
+
+.PHONY: install
+install: target/release/libproxmox_backup_qemu.so
+	install -D -m 0755 target/release/libproxmox_backup_qemu.so ${DESTDIR}/usr/lib//libproxmox_backup_qemu.so.0
+
 
 .PHONY: deb
 deb: $(DEB)

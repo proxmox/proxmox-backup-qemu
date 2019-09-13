@@ -1,2 +1,0 @@
-target/release/libproxmox_backup_qemu.so /usr/lib/libproxmox_backup_qemu.so.0
-proxmox-backup-qemu.h /usr/include/

@@ -1,0 +1,2 @@
+usr/lib/libproxmox_backup_qemu.so.0 /usr/lib/
+proxmox-backup-qemu.h /usr/include/
