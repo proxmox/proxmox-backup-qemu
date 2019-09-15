@@ -21,6 +21,7 @@ struct BackupTask {
 enum BackupMessage {
     End,
     WriteData {
+        dev_id: u8,
         data: *const u8,
         size: u64,
         callback: extern "C" fn(*mut libc::c_void),
@@ -75,14 +76,13 @@ fn backup_worker_task(rx: Receiver<BackupMessage>, host: &str) -> Result<(), Err
                 println!("worker got end mesage");
                 break;
             }
-            BackupMessage::WriteData { data, size, callback, callback_data } => {
-                println!("write {} bytes", size);
+            BackupMessage::WriteData { dev_id, data, size, callback, callback_data } => {
+                println!("dev {}: write {} bytes", dev_id, size);
 
                 runtime.block_on(async move {
-                    for i in 0..10 {
-                        println!("Delay loop {}", i);
-                        tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(1, 0)).await;
-                    }
+                    //println!("Delay test");
+                    //tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(1, 0)).await;
+                    //println!("Delay end");
 
                     // fixme: error handling
                     callback(callback_data);
@@ -122,17 +122,20 @@ pub unsafe extern "C" fn proxmox_backup_connect() -> *mut ProxmoxBackupHandle {
 #[no_mangle]
 pub unsafe extern "C" fn proxmox_backup_write_data_async(
     handle: *mut ProxmoxBackupHandle,
+    dev_id: u8,
     data: *const u8,
     size: u64,
     callback: extern "C" fn(*mut libc::c_void),
     callback_data: *mut libc::c_void,
 ) {
 
-    let msg = BackupMessage::WriteData { data, size , callback, callback_data };
+    let msg = BackupMessage::WriteData { dev_id, data, size , callback, callback_data };
 
     let task = handle as * mut BackupTask;
 
+    println!("write_data_async start");
     let _res = (*task).tx.send(msg); // fixme: log errors
+    println!("write_data_async end");
 }
 
 #[no_mangle]
