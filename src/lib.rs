@@ -12,10 +12,15 @@ use chrono::{Utc, TimeZone};
 
 
 struct BackupTask {
-    worker: JoinHandle<Result<(), Error>>,
+    worker: JoinHandle<Result<BackupStats, Error>>,
     tx: Sender<BackupMessage>,
 //    runtime: Runtime,
-//    client: Arc<BackupClient>,
+    //    client: Arc<BackupClient>,
+}
+
+#[derive(Debug)]
+struct BackupStats {
+    written_bytes: u64,
 }
 
 enum BackupMessage {
@@ -64,9 +69,11 @@ impl BackupTask {
 
 }
 
-fn backup_worker_task(rx: Receiver<BackupMessage>, host: &str) -> Result<(), Error>  {
+fn backup_worker_task(rx: Receiver<BackupMessage>, host: &str) -> Result<BackupStats, Error>  {
 
     let mut runtime = Runtime::new().unwrap(); // fixme
+
+    let mut stats = BackupStats { written_bytes: 0 };
 
     loop {
         let msg = rx.recv()?;
@@ -77,7 +84,8 @@ fn backup_worker_task(rx: Receiver<BackupMessage>, host: &str) -> Result<(), Err
                 break;
             }
             BackupMessage::WriteData { dev_id, data, size, callback, callback_data } => {
-                println!("dev {}: write {} bytes", dev_id, size);
+                stats.written_bytes += size;
+                println!("dev {}: write {} bytes ({})", dev_id, size, stats.written_bytes);
 
                 runtime.block_on(async move {
                     //println!("Delay test");
@@ -95,7 +103,7 @@ fn backup_worker_task(rx: Receiver<BackupMessage>, host: &str) -> Result<(), Err
 
     //    runtime.run()
 
-    Ok(())
+    Ok(stats)
 }
 
 // The C interface
@@ -153,8 +161,8 @@ pub unsafe extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHan
     match task.worker.join() {
         Ok(result) => {
             match result {
-                Ok(()) => {
-                    println!("worker finished");
+                Ok(stats) => {
+                    println!("worker finished {:?}", stats);
                 }
                 Err(err) => {
                     println!("worker finished with error: {:?}", err);
