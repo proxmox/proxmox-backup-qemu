@@ -142,7 +142,13 @@ fn backup_worker_task(
     command_rx: Receiver<BackupMessage>,
 ) -> Result<BackupStats, Error>  {
 
-    let mut runtime = match Runtime::new() {
+    let mut builder = tokio::runtime::Builder::new();
+    
+    builder.blocking_threads(1);
+    builder.core_threads(4);
+    builder.name_prefix("proxmox-backup-qemu-");
+
+    let mut runtime = match builder.build() {
         Ok(runtime) => runtime,
         Err(err) =>  {
             connect_tx.send(Err(format_err!("create runtime failed: {}", err))).unwrap();
