@@ -57,7 +57,20 @@ enum BackupMessage {
     },
 }
 
-//unsafe impl std::marker::Send for BackupMessage {} // fixme: ???
+async fn write_data(
+    dev_id: u8,
+    _data: DataPointer,
+    size: u64,
+) -> Result<(), Error> {
+
+    println!("dev {}: write {}", dev_id, size);
+
+    //println!("Delay test");
+    //tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(2, 0)).await;
+    //println!("Delay end");
+
+    Ok(())
+}
 
 impl BackupTask {
 
@@ -181,21 +194,9 @@ fn backup_worker_task(
                 }
                 BackupMessage::WriteData { dev_id, data, size, callback_info } => {
                     written_bytes2.fetch_add(size, Ordering::SeqCst);
-                    //println!("dev {}: write {} , bytes ({})", dev_id, size, stats.written_bytes);
-
-                    let command_future = async move {
-
-                        println!("Delay test");
-                        tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(2, 0)).await;
-                        println!("Delay end");
-
-                        if false { bail!("TEST ERROR"); }
-
-                        Ok(())
-                    };
 
                     handle_async_command(
-                        command_future,
+                        write_data(dev_id, data, size),
                         abort.listen(),
                         callback_info,
                     ).await;
