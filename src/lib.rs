@@ -2,15 +2,17 @@ use failure::*;
 use std::thread::JoinHandle;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Sender, Receiver};
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::ptr;
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::{c_char, c_void};
 
 //use futures::{future, Future, Stream};
+use futures::future::{self, Future, Either, FutureExt};
 use tokio::runtime::current_thread::Runtime;
 
 //#[macro_use]
 use proxmox_backup::client::*;
+use proxmox_backup::tools::BroadcastFuture;
 
 use chrono::{Utc, TimeZone, DateTime};
 
@@ -35,12 +37,14 @@ struct BackupStats {
 
 enum BackupMessage {
     End,
+    Abort,
     WriteData {
         dev_id: u8,
         data: *const u8,
         size: u64,
         callback: extern "C" fn(*mut c_void),
         callback_data: *mut c_void,
+        error: * mut * mut c_char,
     },
 }
 
@@ -76,6 +80,42 @@ fn connect(runtime: &mut Runtime, repo: &BackupRepository) -> Result<Arc<BackupC
     Ok(client)
 }
 
+fn handle_async_command<F: 'static + Send + Future<Output=Result<(), Error>>>(
+    command_future: F,
+    abort_future: impl 'static + Send + Future<Output=Result<(), Error>>,
+    callback: extern "C" fn(*mut c_void),
+    callback_data: *mut c_void,
+    error: * mut * mut c_char,
+) -> impl Future<Output = ()> {
+
+    futures::future::select(command_future.boxed(), abort_future.boxed())
+        .map(move |either| {
+            match either {
+                Either::Left((result, _)) => {
+                    match result {
+                        Ok(_) => {
+                            println!("command sucessful");
+                            unsafe { *error = ptr::null_mut(); }
+                            callback(callback_data);
+                        }
+                        Err(err) => {
+                            println!("command error {}", err);
+                            let errmsg = CString::new(format!("command error: {}", err)).unwrap();
+                            unsafe { *error = errmsg.into_raw(); }
+                            callback(callback_data);
+                        }
+                    }
+                }
+                Either::Right(_) => { // aborted
+                    println!("command aborted");
+                    let errmsg = CString::new("copmmand aborted".to_string()).unwrap();
+                    unsafe { *error = errmsg.into_raw(); }
+                    callback(callback_data);
+                }
+            }
+        })
+}
+
 fn backup_worker_task(
     repo: BackupRepository,
     connect_tx: Sender<Result<(), Error>>,
@@ -104,33 +144,63 @@ fn backup_worker_task(
 
     let mut stats = BackupStats { written_bytes: 0 };
 
-    loop {
-        let msg = command_rx.recv()?;
+    let (mut abort_tx, mut abort_rx) = tokio::sync::mpsc::channel(1);
+    let abort_rx = async move {
+        match abort_rx.recv().await {
+            Some(()) => Ok(()),
+            None => bail!("abort future canceled"),
+        }
+    };
 
-        match msg {
-            BackupMessage::End => {
-                println!("worker got end mesage");
-                break;
-            }
-            BackupMessage::WriteData { dev_id, data, size, callback, callback_data } => {
-                stats.written_bytes += size;
-                println!("dev {}: write {} bytes ({})", dev_id, size, stats.written_bytes);
+    let abort = BroadcastFuture::new(Box::new(abort_rx));
 
-                runtime.block_on(async move {
-                    //println!("Delay test");
-                    //tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(1, 0)).await;
-                    //println!("Delay end");
+    runtime.spawn(async move  {
 
-                    // fixme: error handling
-                    callback(callback_data);
-                });
+        loop {
+            let msg = command_rx.recv().unwrap();
+
+            match msg {
+                BackupMessage::Abort => {
+                    println!("worker got abort mesage");
+                    let res = abort_tx.send(()).await;
+                    if let Err(_err) = res  {
+                        println!("sending abort failed");
+                    }
+                }
+                BackupMessage::End => {
+                    println!("worker got end mesage");
+                    break;
+                }
+                BackupMessage::WriteData { dev_id, data, size, callback, callback_data, error } => {
+                    //stats.written_bytes += size;
+                    //println!("dev {}: write {} bytes ({})", dev_id, size, stats.written_bytes);
+
+                    let command_future = async move {
+
+                        println!("Delay test");
+                        tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(2, 0)).await;
+                        println!("Delay end");
+
+                        if false { bail!("TEST ERROR"); }
+
+                        Ok(())
+                    };
+
+                    handle_async_command(
+                        command_future,
+                        abort.listen(),
+                        callback,
+                        callback_data,
+                        error,
+                    ).await;
+                }
             }
         }
-    }
 
-    println!("worker end loop");
+        println!("worker end loop");
+    });
 
-    //    runtime.run()
+    runtime.run()?;
 
     Ok(stats)
 }
@@ -188,6 +258,16 @@ pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut Prox
 }
 
 #[no_mangle]
+pub extern "C" fn proxmox_backup_abort(
+    handle: *mut ProxmoxBackupHandle,
+) {
+    let task = handle as * mut BackupTask;
+
+    println!("send abort");
+    let _res = unsafe  { (*task).command_tx.send(BackupMessage::Abort) };
+}
+
+#[no_mangle]
 pub extern "C" fn proxmox_backup_write_data_async(
     handle: *mut ProxmoxBackupHandle,
     dev_id: u8,
@@ -195,9 +275,10 @@ pub extern "C" fn proxmox_backup_write_data_async(
     size: u64,
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
+    error: * mut * mut c_char,
 ) {
 
-    let msg = BackupMessage::WriteData { dev_id, data, size , callback, callback_data };
+    let msg = BackupMessage::WriteData { dev_id, data, size , callback, callback_data, error };
 
     let task = handle as * mut BackupTask;
 
