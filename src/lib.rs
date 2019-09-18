@@ -320,6 +320,9 @@ pub extern "C" fn proxmox_backup_register_image(
 ) -> c_int {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
 
+    if let Some(_reason) = &task.aborted {
+        raise_error_int!(error, "task already aborted");
+    }
 
     let device_name = unsafe { CStr::from_ptr(device_name).to_owned() };
 
