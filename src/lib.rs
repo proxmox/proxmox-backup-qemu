@@ -289,9 +289,8 @@ pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut Prox
 
     match BackupTask::new(repo) {
         Ok(task) => {
-            let tmp = Box::new(task);
-            let test = Box::into_raw(tmp);
-            test as * mut ProxmoxBackupHandle
+            let boxed_task = Box::new(task);
+            Box::into_raw(boxed_task) as * mut ProxmoxBackupHandle
         }
         Err(err) => raise_error_null!(error, err),
     }
