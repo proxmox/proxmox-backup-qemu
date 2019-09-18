@@ -1,11 +1,11 @@
 use failure::*;
 use std::thread::JoinHandle;
-use std::sync::Arc;
+use std::sync::{Mutex, Arc};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::ffi::{CStr, CString};
 use std::ptr;
-use std::os::raw::{c_char, c_void};
+use std::os::raw::{c_char, c_int, c_void};
 
 //use futures::{future, Future, Stream};
 use futures::future::{self, Future, Either, FutureExt};
@@ -50,12 +50,32 @@ unsafe impl std::marker::Send for DataPointer {}
 enum BackupMessage {
     End,
     Abort,
+    RegisterImage {
+        device_name: CString,
+        size: u64,
+        result_channel: Arc<Mutex<Sender<Result<u8, Error>>>>,
+    },
     WriteData {
         dev_id: u8,
         data: DataPointer,
         size: u64,
         callback_info: CallbackPointers,
     },
+}
+
+async fn register_image(
+    device_name: CString,
+    size: u64,
+) -> Result<u8, Error> {
+    println!("register image {} size {}", device_name.to_string_lossy(), size);
+
+    println!("Delay test");
+    tokio::timer::delay(std::time::Instant::now() + std::time::Duration::new(5, 0)).await;
+    println!("Delay end");
+
+    bail!("test");
+
+    Ok(2)
 }
 
 async fn write_data(
@@ -200,6 +220,10 @@ fn backup_worker_task(
                     println!("worker got end mesage");
                     break;
                 }
+                BackupMessage::RegisterImage { device_name, size, result_channel } => {
+                    let res = register_image(device_name, size).await; // fixme : errors
+                    let _ = result_channel.lock().unwrap().send(res);
+               }
                 BackupMessage::WriteData { dev_id, data, size, callback_info } => {
                     written_bytes2.fetch_add(size, Ordering::SeqCst);
 
@@ -276,7 +300,7 @@ pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut Prox
 #[no_mangle]
 pub extern "C" fn proxmox_backup_abort(
     handle: *mut ProxmoxBackupHandle,
-    reason: * mut c_char,
+    reason: *mut c_char,
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
 
@@ -285,6 +309,37 @@ pub extern "C" fn proxmox_backup_abort(
 
     println!("send abort");
     let _res = task.command_tx.send(BackupMessage::Abort);
+}
+
+#[no_mangle]
+pub extern "C" fn proxmox_backup_register_image(
+    handle: *mut ProxmoxBackupHandle,
+    device_name: *const c_char,
+    size: u64,
+    error: * mut * mut c_char,
+) -> c_int {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+
+    let device_name = unsafe { CStr::from_ptr(device_name).to_owned() };
+
+    let (result_sender, result_receiver) = channel();
+
+    let msg = BackupMessage::RegisterImage {
+        device_name,
+        size,
+        result_channel: Arc::new(Mutex::new(result_sender)),
+    };
+
+    println!("register_image_async start");
+    let _res = task.command_tx.send(msg); // fixme: log errors
+    println!("register_image_async send end");
+
+    match result_receiver.recv() {
+        Err(err) => raise_error_int!(error, format!("channel recv error: {}", err)),
+        Ok(Err(err)) => raise_error_int!(error, err.to_string()),
+        Ok(Ok(result)) => result as c_int,
+    }
 }
 
 #[no_mangle]
