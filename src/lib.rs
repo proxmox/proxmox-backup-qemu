@@ -3,7 +3,7 @@ use std::thread::JoinHandle;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Sender, Receiver};
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::ptr;
 use std::os::raw::{c_char, c_void};
 
@@ -29,6 +29,7 @@ struct BackupRepository {
 struct BackupTask {
     worker: JoinHandle<Result<BackupStats, Error>>,
     command_tx: Sender<BackupMessage>,
+    aborted: Option<String>,  // set on abort, conatins abort reason
 }
 
 #[derive(Debug)]
@@ -89,6 +90,7 @@ impl BackupTask {
         Ok(BackupTask {
             worker,
             command_tx,
+            aborted: None,
         })
     }
 }
@@ -143,7 +145,7 @@ fn backup_worker_task(
 ) -> Result<BackupStats, Error>  {
 
     let mut builder = tokio::runtime::Builder::new();
-    
+
     builder.blocking_threads(1);
     builder.core_threads(4);
     builder.name_prefix("proxmox-backup-qemu-");
@@ -184,7 +186,7 @@ fn backup_worker_task(
     runtime.spawn(async move  {
 
         loop {
-            let msg = command_rx.recv().unwrap();
+            let msg = command_rx.recv().unwrap(); // todo: should be blocking
 
             match msg {
                 BackupMessage::Abort => {
@@ -274,11 +276,15 @@ pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut Prox
 #[no_mangle]
 pub extern "C" fn proxmox_backup_abort(
     handle: *mut ProxmoxBackupHandle,
+    reason: * mut c_char,
 ) {
-    let task = handle as * mut BackupTask;
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    let reason = unsafe { CStr::from_ptr(reason).to_string_lossy().into_owned() };
+    task.aborted = Some(reason);
 
     println!("send abort");
-    let _res = unsafe  { (*task).command_tx.send(BackupMessage::Abort) };
+    let _res = task.command_tx.send(BackupMessage::Abort);
 }
 
 #[no_mangle]
@@ -291,6 +297,14 @@ pub extern "C" fn proxmox_backup_write_data_async(
     callback_data: *mut c_void,
     error: * mut * mut c_char,
 ) {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        callback(callback_data);
+        return;
+    }
 
     let msg = BackupMessage::WriteData {
         dev_id,
@@ -299,10 +313,8 @@ pub extern "C" fn proxmox_backup_write_data_async(
         callback_info: CallbackPointers { callback, callback_data, error },
     };
 
-    let task = handle as * mut BackupTask;
-
     println!("write_data_async start");
-    let _res = unsafe { (*task).command_tx.send(msg) }; // fixme: log errors
+    let _res = task.command_tx.send(msg); // fixme: log errors
     println!("write_data_async end");
 }
 
