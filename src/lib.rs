@@ -64,6 +64,7 @@ enum BackupMessage {
 }
 
 async fn register_image(
+    client: Arc<BackupClient>,
     device_name: CString,
     size: u64,
 ) -> Result<u8, Error> {
@@ -79,6 +80,7 @@ async fn register_image(
 }
 
 async fn write_data(
+    client: Arc<BackupClient>,
     dev_id: u8,
     _data: DataPointer,
     size: u64,
@@ -181,6 +183,7 @@ fn backup_worker_task(
     let client = match connect(&mut runtime, &repo) {
         Ok(client) => {
             connect_tx.send(Ok(())).unwrap();
+            client
         }
         Err(err) => {
             connect_tx.send(Err(err)).unwrap();
@@ -221,14 +224,14 @@ fn backup_worker_task(
                     break;
                 }
                 BackupMessage::RegisterImage { device_name, size, result_channel } => {
-                    let res = register_image(device_name, size).await; // fixme : errors
+                    let res = register_image(client.clone(), device_name, size).await; // fixme : errors
                     let _ = result_channel.lock().unwrap().send(res);
                }
                 BackupMessage::WriteData { dev_id, data, size, callback_info } => {
                     written_bytes2.fetch_add(size, Ordering::SeqCst);
 
                     handle_async_command(
-                        write_data(dev_id, data, size),
+                        write_data(client.clone(), dev_id, data, size),
                         abort.listen(),
                         callback_info,
                     ).await;
