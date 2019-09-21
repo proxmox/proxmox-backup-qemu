@@ -131,9 +131,9 @@ async fn register_image(
     let param = json!({ "archive-name": archive_name , "size": size});
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
 
-    let mut zero_bytes = Vec::new();
+    let mut zero_bytes = Vec::with_capacity(chunk_size as usize);
     zero_bytes.resize(chunk_size as usize, 0u8);
-    let mut chunk_builder = DataChunkBuilder::new(zero_bytes.as_ref()).compress(true);
+    let mut chunk_builder = DataChunkBuilder::new(&zero_bytes).compress(true);
     if let Some(ref crypt_config) = crypt_config {
         chunk_builder = chunk_builder.crypt_config(crypt_config);
     }
