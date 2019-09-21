@@ -249,8 +249,12 @@ async fn write_data(
 
     println!("write_data 1 wid = {}, {:p}", wid, data.0);
 
-    let digest_str = if let Some(digest_str) = zero_chunk_digest_str {
-        digest_str
+    let digest_str = if data.0 == ptr::null() {
+        if let Some(digest_str) = zero_chunk_digest_str {
+            digest_str
+        } else {
+            unreachable!();
+        }
     } else {
         let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
 
