@@ -23,6 +23,7 @@ struct BackupRepository {
     host: String,
     store: String,
     user: String,
+    chunk_size: u64,
     backup_id: String,
     backup_time: DateTime<Utc>,
     password: String,
@@ -152,7 +153,7 @@ async fn close_image(
 
     let (wid, written, chunk_count, append_list) = {
         let mut guard = registry.lock().unwrap();
-        let mut info = guard.lookup(dev_id)?;
+        let info = guard.lookup(dev_id)?;
 
         let append_list = if info.digest_list.len() > 0 {
             let param = json!({ "wid": info.wid, "digest-list": info.digest_list, "offset-list": info.offset_list });
@@ -188,12 +189,13 @@ async fn write_data(
     dev_id: u8,
     data: DataPointer,
     offset: u64,
-    size: u64,
+    size: u64, // actual data size
+    chunk_size: u64, // expected data size
 ) -> Result<(), Error> {
 
     println!("dev {}: write {}", dev_id, size);
 
-    if size > 4*1024*1024 {
+    if size > chunk_size {
         bail!("write_data: got unexpected chunk size {}", size);
     }
 
@@ -380,10 +382,9 @@ fn backup_worker_task(
     let written_bytes = Arc::new(AtomicU64::new(0));
     let written_bytes2 = written_bytes.clone();
 
-    //let block_size = 4*1024*1024;
-
     let known_chunks = Arc::new(Mutex::new(HashSet::new()));
     let crypt_config = repo.crypt_config;
+    let chunk_size = repo.chunk_size;
 
     runtime.spawn(async move  {
 
@@ -426,7 +427,7 @@ fn backup_worker_task(
                     written_bytes2.fetch_add(size, Ordering::SeqCst);
 
                     handle_async_command(
-                        write_data(client.clone(), registry.clone(), dev_id, data, offset, size),
+                        write_data(client.clone(), registry.clone(), dev_id, data, offset, size, chunk_size),
                         abort.listen(),
                         callback_info,
                     ).await;
@@ -482,6 +483,7 @@ pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut Prox
         host: "localhost".to_owned(),
         user: "root@pam".to_owned(),
         store: "store2".to_owned(),
+        chunk_size: 4*1024*1024,
         backup_id: "99".to_owned(),
         password: "12345".to_owned(),
         backup_time,
