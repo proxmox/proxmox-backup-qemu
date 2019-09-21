@@ -112,6 +112,37 @@ impl ImageRegistry {
     }
 }
 
+// Note: We alway register/upload a chunk containing zeros
+async fn register_zero_chunk(
+    client: Arc<BackupClient>,
+    crypt_config: Option<Arc<CryptConfig>>,
+    chunk_size: usize,
+    wid: u64,
+) -> Result<String, Error> {
+
+    let mut zero_bytes = Vec::with_capacity(chunk_size);
+    zero_bytes.resize(chunk_size, 0u8);
+    let mut chunk_builder = DataChunkBuilder::new(&zero_bytes).compress(true);
+    if let Some(ref crypt_config) = crypt_config {
+        chunk_builder = chunk_builder.crypt_config(crypt_config);
+    }
+    let zero_chunk_digest_str = proxmox::tools::digest_to_hex(chunk_builder.digest());
+
+    let chunk = chunk_builder.build()?;
+    let chunk_data = chunk.into_raw();
+
+    let param = json!({
+        "wid": wid,
+        "digest": zero_chunk_digest_str,
+        "size": chunk_size,
+        "encoded-size": chunk_data.len(),
+    });
+
+    client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
+
+    Ok(zero_chunk_digest_str)
+}
+
 async fn register_image(
     client: Arc<BackupClient>,
     crypt_config: Option<Arc<CryptConfig>>,
@@ -131,25 +162,7 @@ async fn register_image(
     let param = json!({ "archive-name": archive_name , "size": size});
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
 
-    let mut zero_bytes = Vec::with_capacity(chunk_size as usize);
-    zero_bytes.resize(chunk_size as usize, 0u8);
-    let mut chunk_builder = DataChunkBuilder::new(&zero_bytes).compress(true);
-    if let Some(ref crypt_config) = crypt_config {
-        chunk_builder = chunk_builder.crypt_config(crypt_config);
-    }
-    let zero_chunk_digest_str = proxmox::tools::digest_to_hex(chunk_builder.digest());
-
-    let chunk = chunk_builder.build()?;
-    let chunk_data = chunk.into_raw();
-
-    let param = json!({
-        "wid": wid,
-        "digest": zero_chunk_digest_str,
-        "size": chunk_size,
-        "encoded-size": chunk_data.len(),
-    });
-
-    client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
+    let zero_chunk_digest_str = register_zero_chunk(client, crypt_config, chunk_size as usize, wid).await?;
 
     let info = ImageUploadInfo {
         wid,
