@@ -75,6 +75,7 @@ enum BackupMessage {
 struct ImageUploadInfo {
     wid: u64,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    zero_chunk_digest_str: String,
     digest_list: Vec<String>,
     offset_list: Vec<u64>,
     size: u64,
@@ -118,6 +119,7 @@ async fn register_image(
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     device_name: String,
     size: u64,
+    chunk_size: u64,
 ) -> Result<u8, Error> {
     println!("register image {} size {}", device_name, size);
 
@@ -129,9 +131,18 @@ async fn register_image(
     let param = json!({ "archive-name": archive_name , "size": size});
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
 
+    let mut zero_bytes = Vec::new();
+    zero_bytes.resize(chunk_size as usize, 0u8);
+    let mut chunk_builder = DataChunkBuilder::new(zero_bytes.as_ref()).compress(true);
+    if let Some(ref crypt_config) = crypt_config {
+        chunk_builder = chunk_builder.crypt_config(crypt_config);
+    }
+    let zero_chunk_digest_str = proxmox::tools::digest_to_hex(chunk_builder.digest());
+
     let info = ImageUploadInfo {
         wid,
         known_chunks,
+        zero_chunk_digest_str,
         size,
         digest_list: Vec::new(),
         offset_list: Vec::new(),
@@ -412,7 +423,8 @@ fn backup_worker_task(
                         registry.clone(),
                         known_chunks.clone(),
                         device_name,
-                        size
+                        size,
+                        chunk_size,
                     ).await;
                     let _ = result_channel.lock().unwrap().send(res);
                 }
