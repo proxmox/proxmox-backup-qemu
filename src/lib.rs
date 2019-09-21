@@ -139,6 +139,18 @@ async fn register_image(
     }
     let zero_chunk_digest_str = proxmox::tools::digest_to_hex(chunk_builder.digest());
 
+    let chunk = chunk_builder.build()?;
+    let chunk_data = chunk.into_raw();
+
+    let param = json!({
+        "wid": wid,
+        "digest": zero_chunk_digest_str,
+        "size": chunk_size,
+        "encoded-size": chunk_data.len(),
+    });
+
+    client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
+
     let info = ImageUploadInfo {
         wid,
         known_chunks,
@@ -196,6 +208,7 @@ async fn close_image(
 
 async fn write_data(
     client: Arc<BackupClient>,
+    crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
     dev_id: u8,
     data: DataPointer,
@@ -210,48 +223,48 @@ async fn write_data(
         bail!("write_data: got unexpected chunk size {}", size);
     }
 
-    let (wid, known_chunks) = {
+    let (wid, known_chunks, zero_chunk_digest_str) = {
         let mut guard = registry.lock().unwrap();
         let info = guard.lookup(dev_id)?;
-        (info.wid, info.known_chunks.clone())
+        let zero_chunk_digest_str = if data.0 == ptr::null() {
+            Some(info.zero_chunk_digest_str.clone())
+        } else {
+            None
+        };
+        (info.wid, info.known_chunks.clone(),zero_chunk_digest_str)
     };
 
     println!("write_data 1 wid = {}, {:p}", wid, data.0);
 
-    let bytes = if data.0 == ptr::null() {
-        let mut bytes = bytes::BytesMut::new();
-        bytes.resize(size as usize, 0u8); // fixme: avoid writing zero blocks
-        bytes
+    let digest_str = if let Some(digest_str) = zero_chunk_digest_str {
+        digest_str
     } else {
         let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
-        bytes::BytesMut::from(data) // fixme: howto avoid copying data here?
+
+        let mut chunk_builder = DataChunkBuilder::new(data).compress(true);
+
+        if let Some(ref crypt_config) = crypt_config {
+            chunk_builder = chunk_builder.crypt_config(crypt_config);
+        }
+
+        let digest = chunk_builder.digest();
+        let digest_str = proxmox::tools::digest_to_hex(digest);
+
+        // fixme: handle known chunks
+
+        let chunk = chunk_builder.build()?;
+        let chunk_data = chunk.into_raw();
+
+        let param = json!({
+            "wid": wid,
+            "digest": digest_str,
+            "size": size,
+            "encoded-size": chunk_data.len(),
+        });
+
+        client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
+        digest_str
     };
-
-    let crypt_config: Option<Arc<CryptConfig>> = None;
-
-    let mut chunk_builder = DataChunkBuilder::new(bytes.as_ref()) // fixme: use data directly
-        .compress(true);
-
-    if let Some(ref crypt_config) = crypt_config {
-        chunk_builder = chunk_builder.crypt_config(crypt_config);
-    }
-
-    let digest = chunk_builder.digest();
-    let digest_str = proxmox::tools::digest_to_hex(digest);
-
-    // fixme: handle known chunks
-
-    let chunk = chunk_builder.build()?;
-    let chunk_data = chunk.into_raw();
-
-    let param = json!({
-        "wid": wid,
-        "digest": digest_str,
-        "size": size,
-        "encoded-size": chunk_data.len(),
-    });
-
-    client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
 
     let append_list = {
         let mut guard = registry.lock().unwrap();
@@ -439,7 +452,15 @@ fn backup_worker_task(
                     written_bytes2.fetch_add(size, Ordering::SeqCst);
 
                     handle_async_command(
-                        write_data(client.clone(), registry.clone(), dev_id, data, offset, size, chunk_size),
+                        write_data(
+                            client.clone(),
+                            crypt_config.clone(),
+                            registry.clone(),
+                            dev_id, data,
+                            offset,
+                            size,
+                            chunk_size,
+                        ),
                         abort.listen(),
                         callback_info,
                     ).await;
