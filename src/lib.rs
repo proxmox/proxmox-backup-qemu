@@ -558,7 +558,7 @@ pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut Prox
 #[no_mangle]
 pub extern "C" fn proxmox_backup_abort(
     handle: *mut ProxmoxBackupHandle,
-    reason: *mut c_char,
+    reason: *const c_char,
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
 
