@@ -267,20 +267,26 @@ async fn write_data(
         let digest = chunk_builder.digest();
         let digest_str = proxmox::tools::digest_to_hex(digest);
 
-        // fixme: handle known chunks
+        let chunk_is_known = known_chunks.lock().unwrap().contains(digest);
 
-        let chunk = chunk_builder.build()?;
-        let chunk_data = chunk.into_raw();
+        if chunk_is_known {
+            digest_str
+        } else {
+            let digest = *digest;
+            let chunk = chunk_builder.build()?;
+            let chunk_data = chunk.into_raw();
 
-        let param = json!({
-            "wid": wid,
-            "digest": digest_str,
-            "size": size,
-            "encoded-size": chunk_data.len(),
-        });
+            let param = json!({
+                "wid": wid,
+                "digest": digest_str,
+                "size": size,
+                "encoded-size": chunk_data.len(),
+            });
 
-        client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
-        digest_str
+            client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
+            known_chunks.lock().unwrap().insert(digest);
+            digest_str
+        }
     };
 
     let append_list = {
