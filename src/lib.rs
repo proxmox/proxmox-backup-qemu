@@ -8,8 +8,8 @@ use std::ffi::{CStr, CString};
 use std::ptr;
 use std::os::raw::{c_char, c_int, c_void};
 
-use serde_json::{json, Value};
-use futures::future::{self, Future, Either, FutureExt};
+use serde_json::json;
+use futures::future::{Future, Either, FutureExt};
 use tokio::runtime::Runtime;
 
 //#[macro_use]
@@ -68,6 +68,9 @@ enum BackupMessage {
         data: DataPointer,
         offset: u64,
         size: u64,
+        callback_info: CallbackPointers,
+    },
+    Finish {
         callback_info: CallbackPointers,
     },
 }
@@ -318,6 +321,17 @@ async fn write_data(
     Ok(())
 }
 
+async fn finish_backup(
+    client: Arc<BackupClient>,
+    _registry: Arc<Mutex<ImageRegistry>>,
+) -> Result<(), Error> {
+
+    println!("call finish");
+    client.finish().await?;
+
+    Ok(())
+}
+
 impl BackupTask {
 
     fn new(repo: BackupRepository) -> Result<Self, Error> {
@@ -484,6 +498,13 @@ fn backup_worker_task(
                             size,
                             chunk_size,
                         ),
+                        abort.listen(),
+                        callback_info,
+                    ).await;
+                }
+                BackupMessage::Finish { callback_info } => {
+                    handle_async_command(
+                        finish_backup(client.clone(), registry.clone()),
                         abort.listen(),
                         callback_info,
                     ).await;
@@ -661,6 +682,31 @@ pub extern "C" fn proxmox_backup_close_image_async(
     println!("close_image_async start");
     let _res = task.command_tx.send(msg); // fixme: log errors
     println!("close_image_async end");
+}
+
+#[no_mangle]
+pub extern "C" fn proxmox_backup_finish_async(
+    handle: *mut ProxmoxBackupHandle,
+    callback: extern "C" fn(*mut c_void),
+    callback_data: *mut c_void,
+    error: * mut * mut c_char,
+) {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        callback(callback_data);
+        return;
+    }
+
+    let msg = BackupMessage::Finish {
+        callback_info: CallbackPointers { callback, callback_data, error },
+    };
+
+    println!("finish_async start");
+    let _res = task.command_tx.send(msg); // fixme: log errors
+    println!("finish_async end");
 }
 
 #[no_mangle]
