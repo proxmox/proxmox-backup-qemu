@@ -54,6 +54,12 @@ unsafe impl std::marker::Send for DataPointer {}
 enum BackupMessage {
     End,
     Abort,
+    AddConfig {
+        name: String,
+        data: DataPointer,
+        size: u64,
+        result_channel: Arc<Mutex<Sender<Result<(), Error>>>>,
+    },
     RegisterImage {
         device_name: String,
         size: u64,
@@ -144,6 +150,25 @@ async fn register_zero_chunk(
     client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
 
     Ok(zero_chunk_digest_str)
+}
+
+async fn add_config(
+    client: Arc<BackupClient>,
+    crypt_config: Option<Arc<CryptConfig>>,
+    name: String,
+    data: DataPointer,
+    size: u64,
+) -> Result<(), Error> {
+    println!("add config {} size {}", name, size);
+
+    let blob_name = format!("{}.blob", name);
+
+    let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
+    let data = data.to_vec();
+
+    client.upload_blob_from_data(data, &blob_name, crypt_config, true, false).await?;
+
+    Ok(())
 }
 
 async fn register_image(
@@ -466,6 +491,16 @@ fn backup_worker_task(
                     println!("worker got end mesage");
                     break;
                 }
+                BackupMessage::AddConfig { name, data, size, result_channel } => {
+                    let res = add_config(
+                        client.clone(),
+                        crypt_config.clone(),
+                        name,
+                        data,
+                        size,
+                    ).await;
+                    let _ = result_channel.lock().unwrap().send(res);
+                }
                 BackupMessage::RegisterImage { device_name, size, result_channel } => {
                     let res = register_image(
                         client.clone(),
@@ -625,6 +660,42 @@ pub extern "C" fn proxmox_backup_register_image(
 }
 
 #[no_mangle]
+pub extern "C" fn proxmox_backup_add_config(
+    handle: *mut ProxmoxBackupHandle,
+    name: *const c_char, // expect utf8 here
+    data: *const u8,
+    size: u64,
+    error: * mut * mut c_char,
+) -> c_int {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        raise_error_int!(error, "task already aborted");
+    }
+
+    let name = unsafe { CStr::from_ptr(name).to_string_lossy().to_string() };
+
+    let (result_sender, result_receiver) = channel();
+
+    let msg = BackupMessage::AddConfig {
+        name,
+        data: DataPointer(data),
+        size,
+        result_channel: Arc::new(Mutex::new(result_sender)),
+    };
+
+    println!("add config start");
+    let _res = task.command_tx.send(msg); // fixme: log errors
+    println!("add config send end");
+
+    match result_receiver.recv() {
+        Err(err) => raise_error_int!(error, format!("channel recv error: {}", err)),
+        Ok(Err(err)) => raise_error_int!(error, err.to_string()),
+        Ok(Ok(())) => 0,
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn proxmox_backup_write_data_async(
     handle: *mut ProxmoxBackupHandle,
     dev_id: u8,
@@ -709,6 +780,7 @@ pub extern "C" fn proxmox_backup_finish_async(
     println!("finish_async end");
 }
 
+// fixme: should be async
 #[no_mangle]
 pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 
