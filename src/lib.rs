@@ -84,6 +84,8 @@ enum BackupMessage {
 struct ImageUploadInfo {
     wid: u64,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    index: Vec<[u8;32]>,
+    zero_chunk_digest: [u8; 32],
     zero_chunk_digest_str: String,
     digest_list: Vec<String>,
     offset_list: Vec<u64>,
@@ -127,7 +129,7 @@ async fn register_zero_chunk(
     crypt_config: Option<Arc<CryptConfig>>,
     chunk_size: usize,
     wid: u64,
-) -> Result<String, Error> {
+) -> Result<([u8;32], String), Error> {
 
     let mut zero_bytes = Vec::with_capacity(chunk_size);
     zero_bytes.resize(chunk_size, 0u8);
@@ -135,7 +137,8 @@ async fn register_zero_chunk(
     if let Some(ref crypt_config) = crypt_config {
         chunk_builder = chunk_builder.crypt_config(crypt_config);
     }
-    let zero_chunk_digest_str = proxmox::tools::digest_to_hex(chunk_builder.digest());
+    let zero_chunk_digest = *chunk_builder.digest();
+    let zero_chunk_digest_str = proxmox::tools::digest_to_hex(&zero_chunk_digest);
 
     let chunk = chunk_builder.build()?;
     let chunk_data = chunk.into_raw();
@@ -149,7 +152,7 @@ async fn register_zero_chunk(
 
     client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
 
-    Ok(zero_chunk_digest_str)
+    Ok((zero_chunk_digest, zero_chunk_digest_str))
 }
 
 async fn add_config(
@@ -190,11 +193,18 @@ async fn register_image(
     let param = json!({ "archive-name": archive_name , "size": size});
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
 
-    let zero_chunk_digest_str = register_zero_chunk(client, crypt_config, chunk_size as usize, wid).await?;
+    let (zero_chunk_digest, zero_chunk_digest_str) =
+        register_zero_chunk(client, crypt_config, chunk_size as usize, wid).await?;
+
+    let index_size = ((size + chunk_size -1)/chunk_size) as usize;
+    let mut index = Vec::with_capacity(index_size);
+    index.resize(index_size, [0u8; 32]);
 
     let info = ImageUploadInfo {
         wid,
         known_chunks,
+        index,
+        zero_chunk_digest,
         zero_chunk_digest_str,
         size,
         digest_list: Vec::new(),
@@ -215,7 +225,7 @@ async fn close_image(
 
     println!("close image {}", dev_id);
 
-    let (wid, written, chunk_count, append_list) = {
+    let (wid, csum, written, chunk_count, append_list) = {
         let mut guard = registry.lock().unwrap();
         let info = guard.lookup(dev_id)?;
 
@@ -229,7 +239,12 @@ async fn close_image(
             None
         };
 
-        (info.wid, info.written, info.chunk_count, append_list)
+        let mut csum = openssl::sha::Sha256::new();
+        for digest in info.index.iter() {
+            csum.update(digest);
+        }
+        let csum = csum.finish();
+        (info.wid, csum, info.written, info.chunk_count, append_list)
     };
 
     if let Some(data) = append_list {
@@ -240,6 +255,7 @@ async fn close_image(
         "wid": wid ,
         "chunk-count": chunk_count,
         "size": written,
+        "csum": proxmox::tools::digest_to_hex(&csum),
     });
 
     let _value = client.post("fixed_close", Some(param)).await?;
@@ -258,64 +274,71 @@ async fn write_data(
     chunk_size: u64, // expected data size
 ) -> Result<(), Error> {
 
-    println!("dev {}: write {}", dev_id, size);
+    println!("dev {}: write {} {}", dev_id, offset, size);
 
     if size > chunk_size {
         bail!("write_data: got unexpected chunk size {}", size);
     }
 
-    let (wid, known_chunks, zero_chunk_digest_str) = {
+    let (wid, digest_str, opt_chunk_data) = { // limit guard scope
         let mut guard = registry.lock().unwrap();
         let info = guard.lookup(dev_id)?;
-        let zero_chunk_digest_str = if data.0 == ptr::null() {
-            Some(info.zero_chunk_digest_str.clone())
-        } else {
-            None
-        };
-        (info.wid, info.known_chunks.clone(),zero_chunk_digest_str)
-    };
 
-    println!("write_data 1 wid = {}, {:p}", wid, data.0);
-
-    let digest_str = if data.0 == ptr::null() {
-        if let Some(digest_str) = zero_chunk_digest_str {
-            digest_str
-        } else {
-            unreachable!();
-        }
-    } else {
-        let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
-
-        let mut chunk_builder = DataChunkBuilder::new(data).compress(true);
-
-        if let Some(ref crypt_config) = crypt_config {
-            chunk_builder = chunk_builder.crypt_config(crypt_config);
+        if (offset + chunk_size) > info.size {
+            bail!("write_data: write out of range");
         }
 
-        let digest = chunk_builder.digest();
-        let digest_str = proxmox::tools::digest_to_hex(digest);
+        let pos = (offset/chunk_size) as usize;
 
-        let chunk_is_known = known_chunks.lock().unwrap().contains(digest);
-
-        if chunk_is_known {
-            digest_str
+        if data.0 == ptr::null() {
+            if size != chunk_size { bail!("write_data: got invalid null chunk"); }
+            info.index[pos] = info.zero_chunk_digest;
+            (info.wid, info.zero_chunk_digest_str.clone(), None)
         } else {
-            let digest = *digest;
-            let chunk = chunk_builder.build()?;
-            let chunk_data = chunk.into_raw();
+            let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
 
-            let param = json!({
-                "wid": wid,
-                "digest": digest_str,
-                "size": size,
-                "encoded-size": chunk_data.len(),
-            });
+            let mut chunk_builder = DataChunkBuilder::new(data).compress(true);
 
-            client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
-            known_chunks.lock().unwrap().insert(digest);
-            digest_str
+            if let Some(ref crypt_config) = crypt_config {
+                chunk_builder = chunk_builder.crypt_config(crypt_config);
+            }
+
+            let digest = chunk_builder.digest();
+            info.index[pos] = *digest;
+
+            let digest_str = proxmox::tools::digest_to_hex(digest);
+
+            let chunk_is_known = {
+                let mut known_chunks_guard = info.known_chunks.lock().unwrap();
+                if known_chunks_guard.contains(digest) {
+                    true
+                } else {
+                    known_chunks_guard.insert(*digest);
+                    false
+                }
+            };
+
+            if chunk_is_known {
+                (info.wid, digest_str, None)
+            } else {
+                let chunk = chunk_builder.build()?;
+                let chunk_data = chunk.into_raw();
+                (info.wid, digest_str, Some(chunk_data))
+            }
         }
     };
+
+    if let Some(chunk_data) = opt_chunk_data {
+
+        let param = json!({
+            "wid": wid,
+            "digest": digest_str,
+            "size": size,
+            "encoded-size": chunk_data.len(),
+        });
+
+        client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
+    }
 
     let append_list = {
         let mut guard = registry.lock().unwrap();
