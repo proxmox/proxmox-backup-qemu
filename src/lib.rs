@@ -19,6 +19,9 @@ use proxmox_backup::tools::BroadcastFuture;
 
 use chrono::{Utc, TimeZone, DateTime};
 
+mod capi_types;
+use capi_types::*;
+
 #[derive(Clone)]
 struct BackupSetup {
     host: String,
@@ -41,16 +44,6 @@ struct BackupTask {
 struct BackupTaskStats {
     written_bytes: u64,
 }
-
-struct CallbackPointers {
-    callback: extern "C" fn(*mut c_void),
-    callback_data: *mut c_void,
-    error: * mut *mut c_char,
-}
-unsafe impl std::marker::Send for CallbackPointers {}
-
-struct DataPointer (*const u8);
-unsafe impl std::marker::Send for DataPointer {}
 
 enum BackupMessage {
     End,
@@ -627,9 +620,6 @@ fn backup_worker_task(
 }
 
 // The C interface
-
-#[repr(C)]
-pub struct ProxmoxBackupHandle;
 
 #[no_mangle]
 pub extern "C" fn proxmox_backup_free_error(ptr: * mut c_char) {
