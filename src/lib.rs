@@ -8,7 +8,7 @@ use std::ffi::{CStr, CString};
 use std::ptr;
 use std::os::raw::{c_char, c_int, c_void};
 
-use serde_json::json;
+use serde_json::{json, Value};
 use futures::future::{Future, Either, FutureExt};
 use tokio::runtime::Runtime;
 
@@ -19,6 +19,7 @@ use proxmox_backup::tools::BroadcastFuture;
 
 use chrono::{Utc, TimeZone, DateTime};
 
+#[derive(Clone)]
 struct BackupRepository {
     host: String,
     store: String,
@@ -31,13 +32,13 @@ struct BackupRepository {
 }
 
 struct BackupTask {
-    worker: JoinHandle<Result<BackupStats, Error>>,
+    worker: JoinHandle<Result<BackupTaskStats, Error>>,
     command_tx: Sender<BackupMessage>,
     aborted: Option<String>,  // set on abort, conatins abort reason
 }
 
 #[derive(Debug)]
-struct BackupStats {
+struct BackupTaskStats {
     written_bytes: u64,
 }
 
@@ -83,6 +84,7 @@ enum BackupMessage {
 
 struct ImageUploadInfo {
     wid: u64,
+    device_name: String,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     index: Vec<[u8;32]>,
     zero_chunk_digest: [u8; 32],
@@ -96,6 +98,7 @@ struct ImageUploadInfo {
 
 struct ImageRegistry {
     upload_info: Vec<ImageUploadInfo>,
+    file_list: Vec<Value>,
 }
 
 impl ImageRegistry {
@@ -103,6 +106,7 @@ impl ImageRegistry {
     fn new() -> Self {
         Self {
             upload_info: Vec::new(),
+            file_list: Vec::new(),
         }
     }
 
@@ -158,6 +162,7 @@ async fn register_zero_chunk(
 async fn add_config(
     client: Arc<BackupClient>,
     crypt_config: Option<Arc<CryptConfig>>,
+    registry: Arc<Mutex<ImageRegistry>>,
     name: String,
     data: DataPointer,
     size: u64,
@@ -169,7 +174,14 @@ async fn add_config(
     let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
     let data = data.to_vec();
 
-    client.upload_blob_from_data(data, &blob_name, crypt_config, true, false).await?;
+    let stats = client.upload_blob_from_data(data, &blob_name, crypt_config, true, false).await?;
+
+    let mut guard = registry.lock().unwrap();
+    guard.file_list.push(json!({
+        "filename": blob_name,
+        "size": size,
+        "csum": proxmox::tools::digest_to_hex(&stats.csum),
+    }));
 
     Ok(())
 }
@@ -202,6 +214,7 @@ async fn register_image(
 
     let info = ImageUploadInfo {
         wid,
+        device_name,
         known_chunks,
         index,
         zero_chunk_digest,
@@ -225,7 +238,7 @@ async fn close_image(
 
     println!("close image {}", dev_id);
 
-    let (wid, csum, written, chunk_count, append_list) = {
+    let (wid, device_name, size, csum, written, chunk_count, append_list) = {
         let mut guard = registry.lock().unwrap();
         let info = guard.lookup(dev_id)?;
 
@@ -244,7 +257,8 @@ async fn close_image(
             csum.update(digest);
         }
         let csum = csum.finish();
-        (info.wid, csum, info.written, info.chunk_count, append_list)
+
+        (info.wid, info.device_name.clone(), info.size, csum, info.written, info.chunk_count, append_list)
     };
 
     if let Some(data) = append_list {
@@ -259,6 +273,13 @@ async fn close_image(
     });
 
     let _value = client.post("fixed_close", Some(param)).await?;
+
+    let mut guard = registry.lock().unwrap();
+    guard.file_list.push(json!({
+        "filename": device_name,
+        "size": size,
+        "csum": proxmox::tools::digest_to_hex(&csum),
+    }));
 
     Ok(())
 }
@@ -371,10 +392,30 @@ async fn write_data(
 
 async fn finish_backup(
     client: Arc<BackupClient>,
-    _registry: Arc<Mutex<ImageRegistry>>,
+    registry: Arc<Mutex<ImageRegistry>>,
+    repo: BackupRepository,
 ) -> Result<(), Error> {
 
     println!("call finish");
+
+    let index_data = {
+        let guard = registry.lock().unwrap();
+
+        let index = json!({
+            "backup-type": "vm",
+            "backup-id": repo.backup_id,
+            "backup-time": repo.backup_time.timestamp(),
+            "files": &guard.file_list,
+        });
+
+        println!("Upload index.json");
+        serde_json::to_string_pretty(&index)?.into()
+    };
+
+    client
+        .upload_blob_from_data(index_data, "index.json.blob", repo.crypt_config.clone(), true, true)
+        .await?;
+
     client.finish().await?;
 
     Ok(())
@@ -449,7 +490,7 @@ fn backup_worker_task(
     repo: BackupRepository,
     connect_tx: Sender<Result<(), Error>>,
     command_rx: Receiver<BackupMessage>,
-) -> Result<BackupStats, Error>  {
+) -> Result<BackupTaskStats, Error>  {
 
     let mut builder = tokio::runtime::Builder::new();
 
@@ -492,7 +533,7 @@ fn backup_worker_task(
     let written_bytes2 = written_bytes.clone();
 
     let known_chunks = Arc::new(Mutex::new(HashSet::new()));
-    let crypt_config = repo.crypt_config;
+    let crypt_config = repo.crypt_config.clone();
     let chunk_size = repo.chunk_size;
 
     runtime.spawn(async move  {
@@ -518,10 +559,12 @@ fn backup_worker_task(
                     let res = add_config(
                         client.clone(),
                         crypt_config.clone(),
+                        registry.clone(),
                         name,
                         data,
                         size,
                     ).await;
+
                     let _ = result_channel.lock().unwrap().send(res);
                 }
                 BackupMessage::RegisterImage { device_name, size, result_channel } => {
@@ -562,7 +605,11 @@ fn backup_worker_task(
                 }
                 BackupMessage::Finish { callback_info } => {
                     handle_async_command(
-                        finish_backup(client.clone(), registry.clone()),
+                        finish_backup(
+                            client.clone(),
+                            registry.clone(),
+                            repo.clone(),
+                        ),
                         abort.listen(),
                         callback_info,
                     ).await;
@@ -575,7 +622,7 @@ fn backup_worker_task(
 
     runtime.shutdown_on_idle();
 
-    let stats = BackupStats { written_bytes: written_bytes.fetch_add(0,Ordering::SeqCst)  };
+    let stats = BackupTaskStats { written_bytes: written_bytes.fetch_add(0,Ordering::SeqCst)  };
     Ok(stats)
 }
 
