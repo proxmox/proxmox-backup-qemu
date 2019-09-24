@@ -85,7 +85,6 @@ enum BackupMessage {
 struct ImageUploadInfo {
     wid: u64,
     device_name: String,
-    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     index: Vec<[u8;32]>,
     zero_chunk_digest: [u8; 32],
     zero_chunk_digest_str: String,
@@ -215,7 +214,6 @@ async fn register_image(
     let info = ImageUploadInfo {
         wid,
         device_name,
-        known_chunks,
         index,
         zero_chunk_digest,
         zero_chunk_digest_str,
@@ -288,6 +286,7 @@ async fn write_data(
     client: Arc<BackupClient>,
     crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
+    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     dev_id: u8,
     data: DataPointer,
     offset: u64,
@@ -330,7 +329,7 @@ async fn write_data(
             let digest_str = proxmox::tools::digest_to_hex(digest);
 
             let chunk_is_known = {
-                let mut known_chunks_guard = info.known_chunks.lock().unwrap();
+                let mut known_chunks_guard = known_chunks.lock().unwrap();
                 if known_chunks_guard.contains(digest) {
                     true
                 } else {
@@ -594,6 +593,7 @@ fn backup_worker_task(
                             client.clone(),
                             crypt_config.clone(),
                             registry.clone(),
+                            known_chunks.clone(),
                             dev_id, data,
                             offset,
                             size,
