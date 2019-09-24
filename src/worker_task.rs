@@ -43,36 +43,6 @@ pub(crate) struct BackupTaskStats {
     written_bytes: u64,
 }
 
-pub(crate) enum BackupMessage {
-    End,
-    Abort,
-    AddConfig {
-        name: String,
-        data: DataPointer,
-        size: u64,
-        result_channel: Arc<Mutex<Sender<Result<(), Error>>>>,
-    },
-    RegisterImage {
-        device_name: String,
-        size: u64,
-        result_channel: Arc<Mutex<Sender<Result<u8, Error>>>>,
-    },
-    CloseImage {
-        dev_id: u8,
-        callback_info: CallbackPointers,
-    },
-    WriteData {
-        dev_id: u8,
-        data: DataPointer,
-        offset: u64,
-        size: u64,
-        callback_info: CallbackPointers,
-    },
-    Finish {
-        callback_info: CallbackPointers,
-    },
-}
-
 struct ImageUploadInfo {
     wid: u64,
     device_name: String,
