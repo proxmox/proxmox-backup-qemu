@@ -11,6 +11,9 @@ use chrono::{Utc, TimeZone};
 mod capi_types;
 use capi_types::*;
 
+mod commands;
+use commands::*;
+
 mod worker_task;
 use worker_task::*;
 
