@@ -20,7 +20,7 @@ use proxmox_backup::tools::BroadcastFuture;
 use chrono::{Utc, TimeZone, DateTime};
 
 #[derive(Clone)]
-struct BackupRepository {
+struct BackupSetup {
     host: String,
     store: String,
     user: String,
@@ -392,7 +392,7 @@ async fn write_data(
 async fn finish_backup(
     client: Arc<BackupClient>,
     registry: Arc<Mutex<ImageRegistry>>,
-    repo: BackupRepository,
+    setup: BackupSetup,
 ) -> Result<(), Error> {
 
     println!("call finish");
@@ -402,8 +402,8 @@ async fn finish_backup(
 
         let index = json!({
             "backup-type": "vm",
-            "backup-id": repo.backup_id,
-            "backup-time": repo.backup_time.timestamp(),
+            "backup-id": setup.backup_id,
+            "backup-time": setup.backup_time.timestamp(),
             "files": &guard.file_list,
         });
 
@@ -412,7 +412,7 @@ async fn finish_backup(
     };
 
     client
-        .upload_blob_from_data(index_data, "index.json.blob", repo.crypt_config.clone(), true, true)
+        .upload_blob_from_data(index_data, "index.json.blob", setup.crypt_config.clone(), true, true)
         .await?;
 
     client.finish().await?;
@@ -422,14 +422,14 @@ async fn finish_backup(
 
 impl BackupTask {
 
-    fn new(repo: BackupRepository) -> Result<Self, Error> {
+    fn new(setup: BackupSetup) -> Result<Self, Error> {
 
         let (connect_tx, connect_rx) = channel(); // sync initial server connect
 
         let (command_tx, command_rx) = channel();
 
         let worker = std::thread::spawn(move ||  {
-            backup_worker_task(repo, connect_tx, command_rx)
+            backup_worker_task(setup, connect_tx, command_rx)
         });
 
         connect_rx.recv().unwrap()?;
@@ -442,11 +442,11 @@ impl BackupTask {
     }
 }
 
-fn connect(runtime: &mut Runtime, repo: &BackupRepository) -> Result<Arc<BackupClient>, Error> {
-    let client = HttpClient::new(&repo.host, &repo.user, Some(repo.password.clone()))?;
+fn connect(runtime: &mut Runtime, setup: &BackupSetup) -> Result<Arc<BackupClient>, Error> {
+    let client = HttpClient::new(&setup.host, &setup.user, Some(setup.password.clone()))?;
 
     let client = runtime.block_on(
-        client.start_backup(&repo.store, "vm", &repo.backup_id, repo.backup_time, false))?;
+        client.start_backup(&setup.store, "vm", &setup.backup_id, setup.backup_time, false))?;
 
     Ok(client)
 }
@@ -486,7 +486,7 @@ fn handle_async_command<F: 'static + Send + Future<Output=Result<(), Error>>>(
 }
 
 fn backup_worker_task(
-    repo: BackupRepository,
+    setup: BackupSetup,
     connect_tx: Sender<Result<(), Error>>,
     command_rx: Receiver<BackupMessage>,
 ) -> Result<BackupTaskStats, Error>  {
@@ -505,7 +505,7 @@ fn backup_worker_task(
         }
     };
 
-    let client = match connect(&mut runtime, &repo) {
+    let client = match connect(&mut runtime, &setup) {
         Ok(client) => {
             connect_tx.send(Ok(())).unwrap();
             client
@@ -532,8 +532,8 @@ fn backup_worker_task(
     let written_bytes2 = written_bytes.clone();
 
     let known_chunks = Arc::new(Mutex::new(HashSet::new()));
-    let crypt_config = repo.crypt_config.clone();
-    let chunk_size = repo.chunk_size;
+    let crypt_config = setup.crypt_config.clone();
+    let chunk_size = setup.chunk_size;
 
     runtime.spawn(async move  {
 
@@ -608,7 +608,7 @@ fn backup_worker_task(
                         finish_backup(
                             client.clone(),
                             registry.clone(),
-                            repo.clone(),
+                            setup.clone(),
                         ),
                         abort.listen(),
                         callback_info,
@@ -661,7 +661,7 @@ pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut Prox
 
     let crypt_config: Option<Arc<CryptConfig>> = None;
 
-    let repo = BackupRepository {
+    let setup = BackupSetup {
         host: "localhost".to_owned(),
         user: "root@pam".to_owned(),
         store: "store2".to_owned(),
@@ -672,7 +672,7 @@ pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut Prox
         crypt_config,
     };
 
-    match BackupTask::new(repo) {
+    match BackupTask::new(setup) {
         Ok(task) => {
             let boxed_task = Box::new(task);
             Box::into_raw(boxed_task) as * mut ProxmoxBackupHandle
