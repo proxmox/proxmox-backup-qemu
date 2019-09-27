@@ -5,6 +5,7 @@ use std::ptr;
 use std::os::raw::{c_char, c_int, c_void};
 
 use proxmox_backup::backup::*;
+use proxmox_backup::client::BackupRepository;
 
 use chrono::{Utc, TimeZone};
 
@@ -41,21 +42,36 @@ macro_rules! raise_error_int {
 }
 
 #[no_mangle]
-pub extern "C" fn proxmox_backup_connect(error: * mut * mut c_char) -> *mut ProxmoxBackupHandle {
+pub extern "C" fn proxmox_backup_connect(
+    repo: *const c_char,
+    backup_id: *const c_char,
+    backup_time: u64,
+    password: *const c_char,
+    error: * mut * mut c_char,
+) -> *mut ProxmoxBackupHandle {
 
     println!("Hello");
 
-    let backup_time = Utc.timestamp(Utc::now().timestamp(), 0);
+    let repo = unsafe { CStr::from_ptr(repo).to_string_lossy().into_owned() };
+    let repo: BackupRepository = match repo.parse() {
+        Ok(repo) => repo,
+        Err(err) => raise_error_null!(error, err),
+    };
+    let backup_id = unsafe { CStr::from_ptr(backup_id).to_string_lossy().into_owned() };
 
-    let crypt_config: Option<Arc<CryptConfig>> = None;
+    let backup_time = Utc.timestamp(backup_time as i64, 0);
+
+    let password = unsafe { CStr::from_ptr(password).to_owned() };
+
+    let crypt_config: Option<Arc<CryptConfig>> = None; //fixme:
 
     let setup = BackupSetup {
-        host: "localhost".to_owned(),
-        user: "root@pam".to_owned(),
-        store: "store2".to_owned(),
+        host: repo.host().to_owned(),
+        user: repo.user().to_owned(),
+        store: repo.store().to_owned(),
         chunk_size: 4*1024*1024,
-        backup_id: "99".to_owned(),
-        password: "12345".to_owned(),
+        backup_id,
+        password,
         backup_time,
         crypt_config,
     };

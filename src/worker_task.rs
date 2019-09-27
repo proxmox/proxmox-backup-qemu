@@ -51,7 +51,8 @@ impl BackupTask {
 }
 
 fn connect(runtime: &mut Runtime, setup: &BackupSetup) -> Result<Arc<BackupClient>, Error> {
-    let client = HttpClient::new(&setup.host, &setup.user, Some(setup.password.clone()))?;
+    let password = setup.password.to_str()?.to_owned();
+    let client = HttpClient::new(&setup.host, &setup.user, Some(password))?;
 
     let client = runtime.block_on(
         client.start_backup(&setup.store, "vm", &setup.backup_id, setup.backup_time, false))?;
@@ -230,6 +231,6 @@ fn backup_worker_task(
 
     runtime.shutdown_on_idle();
 
-    let stats = BackupTaskStats { written_bytes: written_bytes.fetch_add(0,Ordering::SeqCst)  };
+    let stats = BackupTaskStats { written_bytes: written_bytes.fetch_add(0, Ordering::SeqCst)  };
     Ok(stats)
 }

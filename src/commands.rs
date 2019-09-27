@@ -2,6 +2,7 @@ use failure::*;
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
 use std::ptr;
+use std::ffi::CString;
 
 use serde_json::{json, Value};
 
@@ -20,7 +21,7 @@ pub(crate) struct BackupSetup {
     pub chunk_size: u64,
     pub backup_id: String,
     pub backup_time: DateTime<Utc>,
-    pub password: String,
+    pub password: CString,
     pub crypt_config: Option<Arc<CryptConfig>>,
 }
 
