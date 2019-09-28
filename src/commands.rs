@@ -4,6 +4,8 @@ use std::sync::{Mutex, Arc};
 use std::ptr;
 use std::ffi::CString;
 
+use futures::future::Future;
+use futures::*; // fixme: remove
 use serde_json::{json, Value};
 
 use proxmox_backup::backup::*;
@@ -25,17 +27,112 @@ pub(crate) struct BackupSetup {
     pub crypt_config: Option<Arc<CryptConfig>>,
 }
 
+struct ChunkUploadInfo {
+    digest: [u8; 32],
+    offset: u64,
+    size: u64,
+}
+struct UploadResult {
+    csum: [u8; 32],
+    chunk_count: u64,
+    bytes_written: u64,
+}
+
 struct ImageUploadInfo {
     wid: u64,
     device_name: String,
-    index: Vec<[u8;32]>,
     zero_chunk_digest: [u8; 32],
-    zero_chunk_digest_str: String,
-    digest_list: Vec<String>,
-    offset_list: Vec<u64>,
-    size: u64,
-    written: u64,
-    chunk_count: u64,
+    device_size: u64,
+    upload_queue: Option<tokio::sync::mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>>,
+    upload_result: Option<tokio::sync::oneshot::Receiver<Result<UploadResult, Error>>>,
+}
+
+
+async fn upload_chunk_list(
+    client: Arc<BackupClient>,
+    wid: u64,
+    digest_list: &mut Vec<String>,
+    offset_list: &mut Vec<u64>,
+) -> Result<(), Error> {
+    let param = json!({ "wid": wid, "digest-list": digest_list, "offset-list": offset_list });
+    let param_data = param.to_string().as_bytes().to_vec();
+
+    digest_list.truncate(0);
+    offset_list.truncate(0);
+
+    client.upload_put("fixed_index", None, "application/json", param_data).await?;
+
+    Ok(())
+}
+
+
+async fn upload_handler(
+    client: Arc<BackupClient>,
+    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    wid: u64,
+    device_size: u64,
+    chunk_size: u64,
+    mut upload_queue: tokio::sync::mpsc::Receiver<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>,
+    upload_result: tokio::sync::oneshot::Sender<Result<UploadResult, Error>>,
+) {
+    let mut chunk_count = 0;
+    let mut bytes_written = 0;
+
+    let mut digest_list = Vec::new();
+    let mut offset_list = Vec::new();
+
+    let index_size = ((device_size + chunk_size -1)/chunk_size) as usize;
+    let mut index = Vec::with_capacity(index_size);
+    index.resize(index_size, [0u8; 32]);
+
+    while let Some(response_future) = upload_queue.recv().await {
+        match response_future.await {
+            Ok(ChunkUploadInfo { digest, offset, size }) => {
+                let digest_str = proxmox::tools::digest_to_hex(&digest);
+
+                println!("upload_handler {:?} {}", digest, offset);
+                let pos = (offset/chunk_size) as usize;
+                index[pos] = digest;
+
+                chunk_count += 1;
+                bytes_written += size;
+
+                {  // register chunk as known
+                    let mut known_chunks_guard = known_chunks.lock().unwrap();
+                    known_chunks_guard.insert(digest);
+                }
+
+                digest_list.push(digest_str);
+                offset_list.push(offset);
+
+                if digest_list.len() >= 128 {
+                    if let Err(err) = upload_chunk_list(client.clone(), wid, &mut digest_list, &mut offset_list).await {
+                        let _ = upload_result.send(Err(err));
+                        return;
+                    }
+                }
+             }
+            Err(err) => {
+                let _ = upload_result.send(Err(err));
+                return;
+            }
+        }
+    }
+
+    if digest_list.len() > 0 {
+        if let Err(err) = upload_chunk_list(client.clone(), wid, &mut digest_list, &mut offset_list).await {
+            let _ = upload_result.send(Err(err));
+            return;
+        }
+    }
+
+    let mut csum = openssl::sha::Sha256::new();
+    for digest in index.iter() {
+        csum.update(digest);
+    }
+    let csum = csum.finish();
+
+    let _ = upload_result.send(Ok(UploadResult { csum, chunk_count, bytes_written }));
 }
 
 pub(crate) struct ImageRegistry {
@@ -75,7 +172,7 @@ async fn register_zero_chunk(
     crypt_config: Option<Arc<CryptConfig>>,
     chunk_size: usize,
     wid: u64,
-) -> Result<([u8;32], String), Error> {
+) -> Result<[u8;32], Error> {
 
     let mut zero_bytes = Vec::with_capacity(chunk_size);
     zero_bytes.resize(chunk_size, 0u8);
@@ -84,21 +181,20 @@ async fn register_zero_chunk(
         chunk_builder = chunk_builder.crypt_config(crypt_config);
     }
     let zero_chunk_digest = *chunk_builder.digest();
-    let zero_chunk_digest_str = proxmox::tools::digest_to_hex(&zero_chunk_digest);
 
     let chunk = chunk_builder.build()?;
     let chunk_data = chunk.into_raw();
 
     let param = json!({
         "wid": wid,
-        "digest": zero_chunk_digest_str,
+        "digest": proxmox::tools::digest_to_hex(&zero_chunk_digest),
         "size": chunk_size,
         "encoded-size": chunk_data.len(),
     });
 
     client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
 
-    Ok((zero_chunk_digest, zero_chunk_digest_str))
+    Ok(zero_chunk_digest)
 }
 
 pub(crate) async fn add_config(
@@ -134,38 +230,45 @@ pub(crate) async fn register_image(
     registry: Arc<Mutex<ImageRegistry>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     device_name: String,
-    size: u64,
+    device_size: u64,
     chunk_size: u64,
 ) -> Result<u8, Error> {
-    println!("register image {} size {}", device_name, size);
+    println!("register image {} size {}", device_name, device_size);
 
     let archive_name = format!("{}.img.fidx", device_name);
 
     client.download_chunk_list("fixed_index", &archive_name, known_chunks.clone()).await?;
     println!("register image download chunk list OK");
 
-    let param = json!({ "archive-name": archive_name , "size": size});
+    let param = json!({ "archive-name": archive_name , "size": device_size});
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
 
-    let (zero_chunk_digest, zero_chunk_digest_str) =
-        register_zero_chunk(client, crypt_config, chunk_size as usize, wid).await?;
+    let zero_chunk_digest =
+        register_zero_chunk(client.clone(), crypt_config, chunk_size as usize, wid).await?;
 
-    let index_size = ((size + chunk_size -1)/chunk_size) as usize;
-    let mut index = Vec::with_capacity(index_size);
-    index.resize(index_size, [0u8; 32]);
+    let (upload_queue_tx, upload_queue_rx) = tokio::sync::mpsc::channel(100);
+    let (upload_result_tx, upload_result_rx) = tokio::sync::oneshot::channel();
+
+    tokio::spawn(
+        upload_handler(
+            client.clone(),
+            known_chunks.clone(),
+            wid,
+            device_size,
+            chunk_size,
+            upload_queue_rx,
+            upload_result_tx,
+        )
+    );
 
     let info = ImageUploadInfo {
         wid,
         device_name,
-        index,
         zero_chunk_digest,
-        zero_chunk_digest_str,
-        size,
-        digest_list: Vec::new(),
-        offset_list: Vec::new(),
-        written: 0,
-        chunk_count: 0,
-    };
+        device_size,
+        upload_queue: Some(upload_queue_tx),
+        upload_result: Some(upload_result_rx),
+   };
 
     let mut guard = registry.lock().unwrap();
     guard.register(info)
@@ -179,38 +282,30 @@ pub(crate) async fn close_image(
 
     println!("close image {}", dev_id);
 
-    let (wid, device_name, size, csum, written, chunk_count, append_list) = {
+    let (wid, upload_result, device_name, device_size) = {
         let mut guard = registry.lock().unwrap();
         let info = guard.lookup(dev_id)?;
 
-        let append_list = if info.digest_list.len() > 0 {
-            let param = json!({ "wid": info.wid, "digest-list": info.digest_list, "offset-list": info.offset_list });
-            let param_data = param.to_string().as_bytes().to_vec();
-            info.digest_list.truncate(0);
-            info.offset_list.truncate(0);
-            Some(param_data)
-        } else {
-            None
-        };
+        info.upload_queue.take(); // close
 
-        let mut csum = openssl::sha::Sha256::new();
-        for digest in info.index.iter() {
-            csum.update(digest);
-        }
-        let csum = csum.finish();
-
-        (info.wid, info.device_name.clone(), info.size, csum, info.written, info.chunk_count, append_list)
+        (info.wid, info.upload_result.take(), info.device_name.clone(), info.device_size)
     };
 
-    if let Some(data) = append_list {
-        client.upload_put("fixed_index", None, "application/json", data).await?;
-    }
+    let upload_result = match upload_result {
+        Some(upload_result) => {
+            match upload_result.await? {
+                Ok(res) => res,
+                Err(err) => bail!("close failed - upload error: {}", err),
+            }
+        }
+        None => bail!("upload result channel already closed"),
+    };
 
     let param = json!({
         "wid": wid ,
-        "chunk-count": chunk_count,
-        "size": written,
-        "csum": proxmox::tools::digest_to_hex(&csum),
+        "chunk-count": upload_result.chunk_count,
+        "size": upload_result.bytes_written,
+        "csum": proxmox::tools::digest_to_hex(&upload_result.csum),
     });
 
     let _value = client.post("fixed_close", Some(param)).await?;
@@ -218,8 +313,8 @@ pub(crate) async fn close_image(
     let mut guard = registry.lock().unwrap();
     guard.file_list.push(json!({
         "filename": device_name,
-        "size": size,
-        "csum": proxmox::tools::digest_to_hex(&csum),
+        "size": device_size,
+        "csum": proxmox::tools::digest_to_hex(&upload_result.csum),
     }));
 
     Ok(())
@@ -239,24 +334,35 @@ pub(crate) async fn write_data(
 
     println!("dev {}: write {} {}", dev_id, offset, size);
 
+    let (wid, mut upload_queue, zero_chunk_digest, device_size) = {
+        let mut guard = registry.lock().unwrap();
+        let info = guard.lookup(dev_id)?;
+
+
+        (info.wid, info.upload_queue.clone(), info.zero_chunk_digest, info.device_size)
+    };
+
+    // Note: last chunk may be smaller than chunk_size
     if size > chunk_size {
         bail!("write_data: got unexpected chunk size {}", size);
     }
 
-    let (wid, digest_str, opt_chunk_data) = { // limit guard scope
-        let mut guard = registry.lock().unwrap();
-        let info = guard.lookup(dev_id)?;
+    if offset & (chunk_size - 1) != 0 {
+        bail!("write_data: offset {} is not correctly aligned", offset);
+    }
 
-        if (offset + chunk_size) > info.size {
-            bail!("write_data: write out of range");
-        }
+    let end_offset = offset + chunk_size;
+    if end_offset > device_size {
+        bail!("write_data: write out of range");
+    } if end_offset < device_size && size != chunk_size {
+        bail!("write_data: chunk too small {}", size);
+    }
 
-        let pos = (offset/chunk_size) as usize;
-
+    let upload_future: Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin> = {
         if data.0 == ptr::null() {
-            if size != chunk_size { bail!("write_data: got invalid null chunk"); }
-            info.index[pos] = info.zero_chunk_digest;
-            (info.wid, info.zero_chunk_digest_str.clone(), None)
+            if size != chunk_size { bail!("write_data: got invalid null chunk"); } // fixme: this may happen?
+            let upload_info = ChunkUploadInfo { digest: zero_chunk_digest, offset, size };
+            Box::new(futures::future::ok(upload_info))
         } else {
             let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
 
@@ -267,64 +373,56 @@ pub(crate) async fn write_data(
             }
 
             let digest = chunk_builder.digest();
-            info.index[pos] = *digest;
-
-            let digest_str = proxmox::tools::digest_to_hex(digest);
 
             let chunk_is_known = {
-                let mut known_chunks_guard = known_chunks.lock().unwrap();
-                if known_chunks_guard.contains(digest) {
-                    true
-                } else {
-                    known_chunks_guard.insert(*digest);
-                    false
-                }
+                let known_chunks_guard = known_chunks.lock().unwrap();
+                known_chunks_guard.contains(digest)
             };
 
             if chunk_is_known {
-                (info.wid, digest_str, None)
-            } else {
+                let upload_info = ChunkUploadInfo { digest: *digest, offset, size };
+                Box::new(futures::future::ok(upload_info))
+           } else {
+                let digest_copy = *digest;
+                let digest_str = proxmox::tools::digest_to_hex(digest);
                 let chunk = chunk_builder.build()?;
                 let chunk_data = chunk.into_raw();
-                (info.wid, digest_str, Some(chunk_data))
+
+                let param = json!({
+                    "wid": wid,
+                    "digest": digest_str,
+                    "size": size,
+                    "encoded-size": chunk_data.len(),
+                });
+
+                let response_future = client.send_upload_request(
+                    "POST",
+                    "fixed_chunk",
+                    Some(param),
+                    "application/octet-stream",
+                    chunk_data,
+                ).await?;
+
+                 let upload_future = response_future
+                    .map_err(Error::from)
+                    .and_then(H2Client::h2api_response)
+                    .map_ok(move |_| {
+                        ChunkUploadInfo { digest: digest_copy, offset, size }
+                    })
+                    .map_err(|err| format_err!("pipelined request failed: {}", err));
+
+                Box::new(Box::pin(upload_future))
             }
         }
     };
 
-    if let Some(chunk_data) = opt_chunk_data {
-
-        let param = json!({
-            "wid": wid,
-            "digest": digest_str,
-            "size": size,
-            "encoded-size": chunk_data.len(),
-        });
-
-        client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
-    }
-
-    let append_list = {
-        let mut guard = registry.lock().unwrap();
-        let mut info = guard.lookup(dev_id)?;
-        info.written += size;
-        info.chunk_count += 1;
-
-        info.digest_list.push(digest_str);
-        info.offset_list.push(offset);
-
-        if info.digest_list.len() >= 128 {
-            let param = json!({ "wid": wid, "digest-list": info.digest_list, "offset-list": info.offset_list });
-            let param_data = param.to_string().as_bytes().to_vec();
-            info.digest_list.truncate(0);
-            info.offset_list.truncate(0);
-            Some(param_data)
-        } else {
-            None
+    match upload_queue {
+        Some(ref mut upload_queue) => {
+            upload_queue.send(upload_future).await?;
         }
-    };
-
-    if let Some(data) = append_list {
-        client.upload_put("fixed_index", None, "application/json", data).await?;
+        None => {
+            bail!("upload queue already closed");
+        }
     }
 
     println!("upload chunk sucessful");
