@@ -295,10 +295,10 @@ pub(crate) async fn close_image(
         Some(upload_result) => {
             match upload_result.await? {
                 Ok(res) => res,
-                Err(err) => bail!("close failed - upload error: {}", err),
+                Err(err) => bail!("close_image: upload error: {}", err),
             }
         }
-        None => bail!("upload result channel already closed"),
+        None => bail!("close_image: unknown error because upload result channel was already closed"),
     };
 
     let param = json!({
@@ -395,6 +395,7 @@ pub(crate) async fn write_data(
                     "encoded-size": chunk_data.len(),
                 });
 
+                // Phase 1: send data
                 let response_future = client.send_upload_request(
                     "POST",
                     "fixed_chunk",
@@ -403,7 +404,8 @@ pub(crate) async fn write_data(
                     chunk_data,
                 ).await?;
 
-                 let upload_future = response_future
+                // create response future (run that in other task)
+                let upload_future = response_future
                     .map_err(Error::from)
                     .and_then(H2Client::h2api_response)
                     .map_ok(move |_| {
@@ -418,7 +420,24 @@ pub(crate) async fn write_data(
 
     match upload_queue {
         Some(ref mut upload_queue) => {
-            upload_queue.send(upload_future).await?;
+            // Phase 2: send reponse future to other task
+            if let Err(_) = upload_queue.send(upload_future).await {
+                let upload_result = {
+                    let mut guard = registry.lock().unwrap();
+                    let info = guard.lookup(dev_id)?;
+                    info.upload_queue.take(); // close
+                    info.upload_result.take()
+                };
+                match upload_result {
+                    Some(upload_result) => {
+                        match upload_result.await? {
+                            Ok(res) => res,
+                            Err(err) => bail!("write_data upload error: {}", err),
+                        }
+                    }
+                    None => bail!("write_data: unknown error because upload result channel was already closed"),
+                };
+            }
         }
         None => {
             bail!("upload queue already closed");
