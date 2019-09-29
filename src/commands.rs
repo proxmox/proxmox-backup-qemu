@@ -147,19 +147,12 @@ pub(crate) async fn register_image(
     let zero_chunk_digest =
         register_zero_chunk(client.clone(), crypt_config, chunk_size as usize, wid).await?;
 
-    let (upload_queue_tx, upload_queue_rx) = tokio::sync::mpsc::channel(100);
-    let (upload_result_tx, upload_result_rx) = tokio::sync::oneshot::channel();
-
-    tokio::spawn(
-        upload_handler(
-            client.clone(),
-            known_chunks.clone(),
-            wid,
-            device_size,
-            chunk_size,
-            upload_queue_rx,
-            upload_result_tx,
-        )
+    let (upload_queue,  upload_result) = create_upload_queue(
+        client.clone(),
+        known_chunks.clone(),
+        wid,
+        device_size,
+        chunk_size,
     );
 
     let info = ImageUploadInfo {
@@ -167,8 +160,8 @@ pub(crate) async fn register_image(
         device_name,
         zero_chunk_digest,
         device_size,
-        upload_queue: Some(upload_queue_tx),
-        upload_result: Some(upload_result_rx),
+        upload_queue: Some(upload_queue),
+        upload_result: Some(upload_result),
    };
 
     let mut guard = registry.lock().unwrap();

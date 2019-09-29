@@ -19,6 +19,34 @@ pub(crate) struct UploadResult {
     pub bytes_written: u64,
 }
 
+pub(crate) fn create_upload_queue(
+    client: Arc<BackupClient>,
+    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    wid: u64,
+    device_size: u64,
+    chunk_size: u64,
+) -> (
+    tokio::sync::mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>,
+    tokio::sync::oneshot::Receiver<Result<UploadResult, Error>>,
+) {
+    let (upload_queue_tx, upload_queue_rx) = tokio::sync::mpsc::channel(100);
+    let (upload_result_tx, upload_result_rx) = tokio::sync::oneshot::channel();
+
+    tokio::spawn(
+        upload_handler(
+            client,
+            known_chunks,
+            wid,
+            device_size,
+            chunk_size,
+            upload_queue_rx,
+            upload_result_tx,
+        )
+    );
+
+    (upload_queue_tx, upload_result_rx)
+}
+
 async fn upload_chunk_list(
     client: Arc<BackupClient>,
     wid: u64,
@@ -36,7 +64,7 @@ async fn upload_chunk_list(
     Ok(())
 }
 
-pub(crate)async fn upload_handler(
+async fn upload_handler(
     client: Arc<BackupClient>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     wid: u64,
