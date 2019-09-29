@@ -4,8 +4,7 @@ use std::sync::{Mutex, Arc};
 use std::ptr;
 use std::ffi::CString;
 
-use futures::future::Future;
-use futures::*; // fixme: remove
+use futures::future::{Future, TryFutureExt};
 use serde_json::{json, Value};
 
 use proxmox_backup::backup::*;
