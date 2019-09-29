@@ -6,6 +6,7 @@ use std::ffi::CString;
 
 use futures::future::{Future, TryFutureExt};
 use serde_json::{json, Value};
+use tokio::sync::{mpsc, oneshot};
 
 use proxmox_backup::backup::*;
 use proxmox_backup::client::*;
@@ -32,8 +33,8 @@ struct ImageUploadInfo {
     device_name: String,
     zero_chunk_digest: [u8; 32],
     device_size: u64,
-    upload_queue: Option<tokio::sync::mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>>,
-    upload_result: Option<tokio::sync::oneshot::Receiver<Result<UploadResult, Error>>>,
+    upload_queue: Option<mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>>,
+    upload_result: Option<oneshot::Receiver<Result<UploadResult, Error>>>,
 }
 
 pub (crate) struct ImageRegistry {

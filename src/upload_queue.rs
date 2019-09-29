@@ -4,7 +4,7 @@ use std::sync::{Mutex, Arc};
 
 use futures::future::Future;
 use serde_json::json;
-
+use tokio::sync::{mpsc, oneshot};
 use proxmox_backup::client::*;
 
 pub(crate) struct ChunkUploadInfo {
@@ -26,11 +26,11 @@ pub(crate) fn create_upload_queue(
     device_size: u64,
     chunk_size: u64,
 ) -> (
-    tokio::sync::mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>,
-    tokio::sync::oneshot::Receiver<Result<UploadResult, Error>>,
+    mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>,
+    oneshot::Receiver<Result<UploadResult, Error>>,
 ) {
-    let (upload_queue_tx, upload_queue_rx) = tokio::sync::mpsc::channel(100);
-    let (upload_result_tx, upload_result_rx) = tokio::sync::oneshot::channel();
+    let (upload_queue_tx, upload_queue_rx) = mpsc::channel(100);
+    let (upload_result_tx, upload_result_rx) = oneshot::channel();
 
     tokio::spawn(
         upload_handler(
@@ -70,8 +70,8 @@ async fn upload_handler(
     wid: u64,
     device_size: u64,
     chunk_size: u64,
-    mut upload_queue: tokio::sync::mpsc::Receiver<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>,
-    upload_result: tokio::sync::oneshot::Sender<Result<UploadResult, Error>>,
+    mut upload_queue: mpsc::Receiver<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>,
+    upload_result: oneshot::Sender<Result<UploadResult, Error>>,
 ) {
     let mut chunk_count = 0;
     let mut bytes_written = 0;
