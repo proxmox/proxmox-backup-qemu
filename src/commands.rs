@@ -255,7 +255,9 @@ pub(crate) async fn write_data(
 
     let upload_future: Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin> = {
         if data.0 == ptr::null() {
-            if size != chunk_size { bail!("write_data: got invalid null chunk"); } // fixme: this may happen?
+            if size != chunk_size {
+                bail!("write_data: got invalid null chunk");
+            }
             let upload_info = ChunkUploadInfo { digest: zero_chunk_digest, offset, size, chunk_is_known: true };
             Box::new(futures::future::ok(upload_info))
         } else {
