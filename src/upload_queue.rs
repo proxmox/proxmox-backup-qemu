@@ -9,6 +9,7 @@ use proxmox_backup::client::*;
 
 pub(crate) struct ChunkUploadInfo {
     pub digest: [u8; 32],
+    pub chunk_is_known: bool,
     pub offset: u64,
     pub size: u64,
 }
@@ -85,7 +86,7 @@ async fn upload_handler(
 
     while let Some(response_future) = upload_queue.recv().await {
         match response_future.await {
-            Ok(ChunkUploadInfo { digest, offset, size }) => {
+            Ok(ChunkUploadInfo { digest, offset, size, chunk_is_known }) => {
                 let digest_str = proxmox::tools::digest_to_hex(&digest);
 
                 println!("upload_handler {:?} {}", digest, offset);
@@ -95,7 +96,7 @@ async fn upload_handler(
                 chunk_count += 1;
                 bytes_written += size;
 
-                {  // register chunk as known
+                if !chunk_is_known { // register chunk as known
                     let mut known_chunks_guard = known_chunks.lock().unwrap();
                     known_chunks_guard.insert(digest);
                 }

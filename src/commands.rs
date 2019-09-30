@@ -256,7 +256,7 @@ pub(crate) async fn write_data(
     let upload_future: Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin> = {
         if data.0 == ptr::null() {
             if size != chunk_size { bail!("write_data: got invalid null chunk"); } // fixme: this may happen?
-            let upload_info = ChunkUploadInfo { digest: zero_chunk_digest, offset, size };
+            let upload_info = ChunkUploadInfo { digest: zero_chunk_digest, offset, size, chunk_is_known: true };
             Box::new(futures::future::ok(upload_info))
         } else {
             let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
@@ -275,7 +275,7 @@ pub(crate) async fn write_data(
             };
 
             if chunk_is_known {
-                let upload_info = ChunkUploadInfo { digest: *digest, offset, size };
+                let upload_info = ChunkUploadInfo { digest: *digest, offset, size, chunk_is_known: true };
                 Box::new(futures::future::ok(upload_info))
            } else {
                 let digest_copy = *digest;
@@ -304,7 +304,7 @@ pub(crate) async fn write_data(
                     .map_err(Error::from)
                     .and_then(H2Client::h2api_response)
                     .map_ok(move |_| {
-                        ChunkUploadInfo { digest: digest_copy, offset, size }
+                        ChunkUploadInfo { digest: digest_copy, offset, size, chunk_is_known: false }
                     })
                     .map_err(|err| format_err!("pipelined request failed: {}", err));
 
