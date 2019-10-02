@@ -207,7 +207,7 @@ pub(crate) async fn close_image(
 
     let mut guard = registry.lock().unwrap();
     guard.file_list.push(json!({
-        "filename": device_name,
+        "filename": format!("{}.img.fidx", device_name),
         "size": device_size,
         "csum": proxmox::tools::digest_to_hex(&upload_result.csum),
     }));
