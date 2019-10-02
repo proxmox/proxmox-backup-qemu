@@ -119,7 +119,7 @@ pub(crate) async fn add_config(
     let mut guard = registry.lock().unwrap();
     guard.file_list.push(json!({
         "filename": blob_name,
-        "size": size,
+        "size": stats.size,
         "csum": proxmox::tools::digest_to_hex(&stats.csum),
     }));
 
