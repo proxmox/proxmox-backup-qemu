@@ -79,13 +79,12 @@ async fn register_zero_chunk(
     let mut zero_bytes = Vec::with_capacity(chunk_size);
     zero_bytes.resize(chunk_size, 0u8);
     let mut chunk_builder = DataChunkBuilder::new(&zero_bytes).compress(true);
-    if let Some(ref crypt_config) = crypt_config {
-        chunk_builder = chunk_builder.crypt_config(crypt_config);
+    if let Some(crypt_config) = crypt_config {
+        chunk_builder = chunk_builder.crypt_config(crypt_config.clone());
     }
-    let zero_chunk_digest = *chunk_builder.digest();
 
-    let chunk = chunk_builder.build()?;
-    let chunk_data = chunk.into_raw();
+    let (chunk, zero_chunk_digest) = chunk_builder.build()?;
+    let chunk_data = chunk.into_inner();
 
     let param = json!({
         "wid": wid,
@@ -265,8 +264,8 @@ pub(crate) async fn write_data(
 
             let mut chunk_builder = DataChunkBuilder::new(data).compress(true);
 
-            if let Some(ref crypt_config) = crypt_config {
-                chunk_builder = chunk_builder.crypt_config(crypt_config);
+            if let Some(crypt_config) = crypt_config {
+                chunk_builder = chunk_builder.crypt_config(crypt_config.clone());
             }
 
             let digest = chunk_builder.digest();
@@ -280,10 +279,9 @@ pub(crate) async fn write_data(
                 let upload_info = ChunkUploadInfo { digest: *digest, offset, size, chunk_is_known: true };
                 Box::new(futures::future::ok(upload_info))
            } else {
-                let digest_copy = *digest;
-                let digest_str = proxmox::tools::digest_to_hex(digest);
-                let chunk = chunk_builder.build()?;
-                let chunk_data = chunk.into_raw();
+                let (chunk, digest) = chunk_builder.build()?;
+                let digest_str = proxmox::tools::digest_to_hex(&digest);
+                let chunk_data = chunk.into_inner();
 
                 let param = json!({
                     "wid": wid,
@@ -306,7 +304,7 @@ pub(crate) async fn write_data(
                     .map_err(Error::from)
                     .and_then(H2Client::h2api_response)
                     .map_ok(move |_| {
-                        ChunkUploadInfo { digest: digest_copy, offset, size, chunk_is_known: false }
+                        ChunkUploadInfo { digest: digest, offset, size, chunk_is_known: false }
                     })
                     .map_err(|err| format_err!("pipelined request failed: {}", err));
 
