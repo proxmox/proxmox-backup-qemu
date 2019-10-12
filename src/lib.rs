@@ -1,9 +1,11 @@
+use failure::*;
 use std::sync::{Mutex, Arc};
 use std::sync::mpsc::channel;
 use std::ffi::{CStr, CString};
 use std::ptr;
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::{c_uchar, c_char, c_int, c_void};
 
+use proxmox::tools::try_block;
 use proxmox_backup::backup::*;
 use proxmox_backup::client::BackupRepository;
 
@@ -19,6 +21,9 @@ use commands::*;
 
 mod worker_task;
 use worker_task::*;
+
+mod restore;
+use restore::*;
 
 // The C interface
 
@@ -286,4 +291,52 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
     }
 
     //drop(task);
+}
+
+
+/// Simple interface to restore images
+///
+/// Note: This implementation is not async
+#[no_mangle]
+pub extern "C" fn proxmox_backup_restore(
+    repo: *const c_char,
+    snapshot: *const c_char,
+    archive_name: *const c_char, // expect full name here, i.e. "name.img.fidx"
+    keyfile: *const c_char,
+    callback: extern "C" fn(*mut c_void, u64, *const c_uchar, u64) -> c_int,
+    callback_data: *mut c_void,
+    error: * mut * mut c_char,
+) -> c_int {
+
+    let result: Result<_, Error> = try_block!({
+        let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
+        let repo: BackupRepository = repo.parse()?;
+
+        let archive_name = unsafe { CStr::from_ptr(archive_name).to_str()?.to_owned() };
+        let keyfile = if keyfile == std::ptr::null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(keyfile).to_str().map(|p| std::path::PathBuf::from(p))? })
+        };
+
+        let snapshot = unsafe { CStr::from_ptr(snapshot).to_string_lossy().into_owned() };
+        let snapshot = BackupDir::parse(&snapshot)?;
+
+        let write_data_callback = move |offset: u64, data: &[u8]| {
+            callback(callback_data, offset, data.as_ptr(), data.len() as u64)
+        };
+        let write_zero_callback = move |offset: u64, len: u64| {
+            callback(callback_data, offset, std::ptr::null(), len)
+        };
+
+        restore(repo, snapshot, archive_name, keyfile, write_data_callback, write_zero_callback)?;
+
+        Ok(())
+    });
+
+    if let Err(err) = result {
+        raise_error_int!(error, err);
+    };
+
+    return 0;
 }
