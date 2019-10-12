@@ -79,8 +79,8 @@ async fn register_zero_chunk(
     let mut zero_bytes = Vec::with_capacity(chunk_size);
     zero_bytes.resize(chunk_size, 0u8);
     let mut chunk_builder = DataChunkBuilder::new(&zero_bytes).compress(true);
-    if let Some(crypt_config) = crypt_config {
-        chunk_builder = chunk_builder.crypt_config(crypt_config.clone());
+    if let Some(ref crypt_config) = crypt_config {
+        chunk_builder = chunk_builder.crypt_config(crypt_config);
     }
 
     let (chunk, zero_chunk_digest) = chunk_builder.build()?;
@@ -264,8 +264,8 @@ pub(crate) async fn write_data(
 
             let mut chunk_builder = DataChunkBuilder::new(data).compress(true);
 
-            if let Some(crypt_config) = crypt_config {
-                chunk_builder = chunk_builder.crypt_config(crypt_config.clone());
+            if let Some(ref crypt_config) = crypt_config {
+                chunk_builder = chunk_builder.crypt_config(crypt_config);
             }
 
             let digest = chunk_builder.digest();
