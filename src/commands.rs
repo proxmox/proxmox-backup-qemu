@@ -70,7 +70,7 @@ impl ImageRegistry {
 
 // Note: We alway register/upload a chunk containing zeros
 async fn register_zero_chunk(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
     chunk_size: usize,
     wid: u64,
@@ -99,7 +99,7 @@ async fn register_zero_chunk(
 }
 
 pub(crate) async fn add_config(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
     name: String,
@@ -126,7 +126,7 @@ pub(crate) async fn add_config(
 }
 
 pub(crate) async fn register_image(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
@@ -169,7 +169,7 @@ pub(crate) async fn register_image(
 }
 
 pub(crate) async fn close_image(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     registry: Arc<Mutex<ImageRegistry>>,
     dev_id: u8,
 ) -> Result<(), Error> {
@@ -215,7 +215,7 @@ pub(crate) async fn close_image(
 }
 
 pub(crate) async fn write_data(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
@@ -345,7 +345,7 @@ pub(crate) async fn write_data(
 }
 
 pub(crate) async fn finish_backup(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     registry: Arc<Mutex<ImageRegistry>>,
     setup: BackupSetup,
 ) -> Result<(), Error> {

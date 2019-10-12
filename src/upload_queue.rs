@@ -21,7 +21,7 @@ pub(crate) struct UploadResult {
 }
 
 pub(crate) fn create_upload_queue(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     wid: u64,
     device_size: u64,
@@ -49,7 +49,7 @@ pub(crate) fn create_upload_queue(
 }
 
 async fn upload_chunk_list(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     wid: u64,
     digest_list: &mut Vec<String>,
     offset_list: &mut Vec<u64>,
@@ -66,7 +66,7 @@ async fn upload_chunk_list(
 }
 
 async fn upload_handler(
-    client: Arc<BackupClient>,
+    client: Arc<BackupWriter>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     wid: u64,
     device_size: u64,

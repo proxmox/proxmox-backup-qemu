@@ -1,13 +1,8 @@
 use failure::*;
-use std::sync::{Mutex, Arc};
-use std::sync::mpsc::channel;
-use std::ffi::{CStr, CString};
-use std::ptr;
-use std::os::raw::{c_char, c_int, c_void};
+use std::sync::Arc;
 
-use proxmox::tools::try_block;
 use proxmox_backup::backup::*;
-use proxmox_backup::client::{HttpClient, BackupRepository};
+use proxmox_backup::client::{HttpClient, BackupReader, BackupRepository};
 
 fn get_encryption_key_password() -> Result<Vec<u8>, Error> {
     use std::env::VarError::*;
@@ -30,15 +25,14 @@ pub async fn restore_async(
 ) -> Result<(), Error> {
 
     let client = HttpClient::new(repo.host(), repo.user(), None)?;
-    let client = client
-        .start_backup_reader(
-            repo.store(),
-            snapshot.group().backup_type(),
-            snapshot.group().backup_id(),
-            snapshot.backup_time(),
-            true
-        )
-        .await?;
+    let client = BackupReader::start(
+        client,
+        repo.store(),
+        snapshot.group().backup_type(),
+        snapshot.group().backup_id(),
+        snapshot.backup_time(),
+        true
+    ).await?;
 
     bail!("implement me");
     
