@@ -110,7 +110,7 @@ fn backup_worker_task(
         Ok(runtime) => runtime,
         Err(err) =>  {
             connect_tx.send(Err(format_err!("create runtime failed: {}", err))).unwrap();
-            bail!("create runtiome failed");
+            bail!("create runtime failed");
         }
     };
 
