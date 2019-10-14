@@ -76,14 +76,11 @@ async fn register_zero_chunk(
     wid: u64,
 ) -> Result<[u8;32], Error> {
 
-    let mut zero_bytes = Vec::with_capacity(chunk_size);
-    zero_bytes.resize(chunk_size, 0u8);
-    let mut chunk_builder = DataChunkBuilder::new(&zero_bytes).compress(true);
-    if let Some(ref crypt_config) = crypt_config {
-        chunk_builder = chunk_builder.crypt_config(crypt_config);
-    }
-
-    let (chunk, zero_chunk_digest) = chunk_builder.build()?;
+    let (chunk, zero_chunk_digest) = DataChunkBuilder::build_zero_chunk(
+        crypt_config.as_ref().map(Arc::as_ref),
+        chunk_size,
+        true,
+    )?;
     let chunk_data = chunk.into_inner();
 
     let param = json!({
