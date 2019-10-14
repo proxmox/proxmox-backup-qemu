@@ -306,6 +306,7 @@ pub extern "C" fn proxmox_backup_restore(
     callback: extern "C" fn(*mut c_void, u64, *const c_uchar, u64) -> c_int,
     callback_data: *mut c_void,
     error: * mut * mut c_char,
+    verbose: bool,
 ) -> c_int {
 
     let result: Result<_, Error> = try_block!({
@@ -329,7 +330,7 @@ pub extern "C" fn proxmox_backup_restore(
             callback(callback_data, offset, std::ptr::null(), len)
         };
 
-        restore(repo, snapshot, archive_name, keyfile, write_data_callback, write_zero_callback)?;
+        restore(repo, snapshot, archive_name, keyfile, write_data_callback, write_zero_callback, verbose)?;
 
         Ok(())
     });
