@@ -12,9 +12,11 @@ unsafe impl std::marker::Send for CallbackPointers {}
 pub(crate) struct DataPointer (pub *const u8);
 unsafe impl std::marker::Send for DataPointer {}
 
+/// Opaque handle for restore jobs
 #[repr(C)]
 pub struct ProxmoxRestoreHandle;
 
+/// Opaque handle for backups jobs
 #[repr(C)]
 pub struct ProxmoxBackupHandle;
 

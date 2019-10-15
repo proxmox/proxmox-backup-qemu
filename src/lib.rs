@@ -25,8 +25,11 @@ use worker_task::*;
 mod restore;
 use restore::*;
 
-// The C interface
-
+/// Free returned error messages
+///
+/// All calls can return error messages, but they are allocated using
+/// the rust standard library. This call moves ownership back to rust
+/// and free the allocated memory.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_free_error(ptr: * mut c_char) {
     unsafe { CString::from_raw(ptr); }
@@ -48,6 +51,12 @@ macro_rules! raise_error_int {
     }}
 }
 
+/// Start new backup
+///
+/// Open a connection to the backup servers and start a new backup
+/// task.
+///
+/// Note: This call is currently not async and can block.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_connect(
     repo: *const c_char,
@@ -90,6 +99,11 @@ pub extern "C" fn proxmox_backup_connect(
     }
 }
 
+/// Abort a running backup task
+///
+/// This stops the current backup task. It is still necessary to call
+/// proxmox_backup_disconnect() to close the connection and free
+/// allocated memory.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_abort(
     handle: *mut ProxmoxBackupHandle,
@@ -104,6 +118,13 @@ pub extern "C" fn proxmox_backup_abort(
     let _res = task.command_tx.send(BackupMessage::Abort);
 }
 
+/// Register a backup image
+///
+/// Create a new image archive on the backup server
+/// ('<device_name>.img.fidx'). The returned integer is the dev_id
+/// parameter for the proxmox_backup_write_data_async() method.
+///
+/// Note: This call is currently not async and can block.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_register_image(
     handle: *mut ProxmoxBackupHandle,
@@ -138,6 +159,11 @@ pub extern "C" fn proxmox_backup_register_image(
     }
 }
 
+/// Add a configuration blob to the backup
+///
+/// Create and upload a data blob "<name>.blob".
+///
+/// Note: This call is currently not async and can block.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_add_config(
     handle: *mut ProxmoxBackupHandle,
@@ -174,6 +200,9 @@ pub extern "C" fn proxmox_backup_add_config(
     }
 }
 
+/// Write data to into a registered image
+///
+/// Upload a chunk of data for the <dev_id> image.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_write_data_async(
     handle: *mut ProxmoxBackupHandle,
@@ -207,6 +236,9 @@ pub extern "C" fn proxmox_backup_write_data_async(
     println!("write_data_async end");
 }
 
+/// Close a registered image
+///
+/// Mark the image as closed. Further writes are not possible.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_close_image_async(
     handle: *mut ProxmoxBackupHandle,
@@ -234,6 +266,10 @@ pub extern "C" fn proxmox_backup_close_image_async(
     println!("close_image_async end");
 }
 
+/// Finish the backup
+///
+/// Finish the backup by creating and uploading the backup manifest.
+/// All registered images have to be closed before calling this.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_finish_async(
     handle: *mut ProxmoxBackupHandle,
@@ -260,6 +296,9 @@ pub extern "C" fn proxmox_backup_finish_async(
 }
 
 // fixme: should be async
+/// Disconnect and free allocated memory
+///
+/// The handle becomes invalid after this call.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 
@@ -293,6 +332,8 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 
 
 /// Simple interface to restore images
+///
+/// Connect the the backup server.
 ///
 /// Note: This implementation is not async
 #[no_mangle]
@@ -328,6 +369,9 @@ pub extern "C" fn proxmox_restore_connect(
     }
 }
 
+/// Disconnect and free allocated memory
+///
+/// The handle becomes invalid after this call.
 #[no_mangle]
 pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) {
 
@@ -335,6 +379,9 @@ pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) 
     unsafe { Box::from_raw(conn) }; //drop(conn)
 }
 
+/// Restore an image
+///
+/// Image data is downloaded and sequentially dumped to the callback.
 #[no_mangle]
 pub extern "C" fn proxmox_restore_image(
     handle: *mut ProxmoxRestoreHandle,
