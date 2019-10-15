@@ -57,8 +57,6 @@ pub extern "C" fn proxmox_backup_connect(
     error: * mut * mut c_char,
 ) -> *mut ProxmoxBackupHandle {
 
-    println!("Hello");
-
     let repo = unsafe { CStr::from_ptr(repo).to_string_lossy().into_owned() };
     let repo: BackupRepository = match repo.parse() {
         Ok(repo) => repo,
@@ -298,22 +296,17 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 ///
 /// Note: This implementation is not async
 #[no_mangle]
-pub extern "C" fn proxmox_backup_restore(
+pub extern "C" fn proxmox_restore_connect(
     repo: *const c_char,
     snapshot: *const c_char,
-    archive_name: *const c_char, // expect full name here, i.e. "name.img.fidx"
     keyfile: *const c_char,
-    callback: extern "C" fn(*mut c_void, u64, *const c_uchar, u64) -> c_int,
-    callback_data: *mut c_void,
     error: * mut * mut c_char,
-    verbose: bool,
-) -> c_int {
+) -> *mut ProxmoxRestoreHandle {
 
     let result: Result<_, Error> = try_block!({
         let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
         let repo: BackupRepository = repo.parse()?;
 
-        let archive_name = unsafe { CStr::from_ptr(archive_name).to_str()?.to_owned() };
         let keyfile = if keyfile == std::ptr::null() {
             None
         } else {
@@ -323,14 +316,50 @@ pub extern "C" fn proxmox_backup_restore(
         let snapshot = unsafe { CStr::from_ptr(snapshot).to_string_lossy().into_owned() };
         let snapshot = BackupDir::parse(&snapshot)?;
 
+        ProxmoxRestore::new(repo, snapshot, keyfile)
+    });
+
+    match result {
+        Ok(conn) => {
+            let boxed_task = Box::new(conn);
+            Box::into_raw(boxed_task) as * mut ProxmoxRestoreHandle
+        }
+        Err(err) => raise_error_null!(error, err),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) {
+
+    let conn = handle as * mut ProxmoxRestore;
+    unsafe { Box::from_raw(conn) }; //drop(conn)
+}
+
+#[no_mangle]
+pub extern "C" fn proxmox_restore_image(
+    handle: *mut ProxmoxRestoreHandle,
+    archive_name: *const c_char, // expect full name here, i.e. "name.img.fidx"
+    callback: extern "C" fn(*mut c_void, u64, *const c_uchar, u64) -> c_int,
+    callback_data: *mut c_void,
+    error: * mut * mut c_char,
+    verbose: bool,
+) -> c_int {
+
+    let conn = unsafe { &mut *(handle as * mut ProxmoxRestore) };
+
+    let result: Result<_, Error> = try_block!({
+
+        let archive_name = unsafe { CStr::from_ptr(archive_name).to_str()?.to_owned() };
+
         let write_data_callback = move |offset: u64, data: &[u8]| {
             callback(callback_data, offset, data.as_ptr(), data.len() as u64)
         };
+
         let write_zero_callback = move |offset: u64, len: u64| {
             callback(callback_data, offset, std::ptr::null(), len)
         };
 
-        restore(repo, snapshot, archive_name, keyfile, write_data_callback, write_zero_callback, verbose)?;
+        conn.restore(archive_name, write_data_callback, write_zero_callback, verbose)?;
 
         Ok(())
     });

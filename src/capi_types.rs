@@ -13,6 +13,9 @@ pub(crate) struct DataPointer (pub *const u8);
 unsafe impl std::marker::Send for DataPointer {}
 
 #[repr(C)]
+pub struct ProxmoxRestoreHandle;
+
+#[repr(C)]
 pub struct ProxmoxBackupHandle;
 
 pub(crate) enum BackupMessage {
