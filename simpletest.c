@@ -23,7 +23,7 @@ void main(int argc, char **argv) {
   char *pbs_error = NULL;
 
   ProxmoxBackupHandle *pbs = proxmox_backup_connect
-    (repository, backup_id, backup_time, NULL, &pbs_error);
+    (repository, backup_id, backup_time, NULL, NULL, NULL, &pbs_error);
 
   if (pbs == NULL) {
     fprintf(stderr, "proxmox_backup_connect failed - %s\n", pbs_error);
