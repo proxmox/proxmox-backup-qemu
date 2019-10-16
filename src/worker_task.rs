@@ -51,8 +51,7 @@ impl BackupTask {
 }
 
 fn connect(runtime: &mut Runtime, setup: &BackupSetup) -> Result<Arc<BackupWriter>, Error> {
-    let password = setup.password.to_str()?.to_owned();
-    let client = HttpClient::new(&setup.host, &setup.user, Some(password))?;
+    let client = HttpClient::new(&setup.host, &setup.user, setup.password.clone())?;
 
     let client = runtime.block_on(
         BackupWriter::start(client, &setup.store, "vm", &setup.backup_id, setup.backup_time, false)

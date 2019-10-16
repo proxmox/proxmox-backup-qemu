@@ -66,34 +66,43 @@ pub extern "C" fn proxmox_backup_connect(
     error: * mut * mut c_char,
 ) -> *mut ProxmoxBackupHandle {
 
-    let repo = unsafe { CStr::from_ptr(repo).to_string_lossy().into_owned() };
-    let repo: BackupRepository = match repo.parse() {
-        Ok(repo) => repo,
-        Err(err) => raise_error_null!(error, err),
-    };
-    let backup_id = unsafe { CStr::from_ptr(backup_id).to_string_lossy().into_owned() };
+    let setup: Result<_, Error> = try_block!({
+        let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
+        let repo: BackupRepository = repo.parse()?;
 
-    let backup_time = Utc.timestamp(backup_time as i64, 0);
+        let backup_id = unsafe { CStr::from_ptr(backup_id).to_str()?.to_owned() };
 
-    let password = unsafe { CStr::from_ptr(password).to_owned() };
+        let backup_time = Utc.timestamp(backup_time as i64, 0);
 
-    let crypt_config: Option<Arc<CryptConfig>> = None; //fixme:
+        let password = if password == std::ptr::null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(password).to_str()?.to_owned() })
+        };
 
-    let setup = BackupSetup {
-        host: repo.host().to_owned(),
-        user: repo.user().to_owned(),
-        store: repo.store().to_owned(),
-        chunk_size: 4*1024*1024,
-        backup_id,
-        password,
-        backup_time,
-        crypt_config,
-    };
+        let crypt_config: Option<Arc<CryptConfig>> = None; //fixme:
 
-    match BackupTask::new(setup) {
-        Ok(task) => {
-            let boxed_task = Box::new(task);
-            Box::into_raw(boxed_task) as * mut ProxmoxBackupHandle
+        Ok(BackupSetup {
+            host: repo.host().to_owned(),
+            user: repo.user().to_owned(),
+            store: repo.store().to_owned(),
+            chunk_size: 4*1024*1024,
+            backup_id,
+            password,
+            backup_time,
+            crypt_config,
+        })
+    });
+
+    match setup {
+        Ok(setup) => {
+            match BackupTask::new(setup) {
+                Ok(task) => {
+                    let boxed_task = Box::new(task);
+                    Box::into_raw(boxed_task) as * mut ProxmoxBackupHandle
+                }
+                Err(err) => raise_error_null!(error, err),
+            }
         }
         Err(err) => raise_error_null!(error, err),
     }
