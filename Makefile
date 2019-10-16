@@ -38,7 +38,7 @@ $(DEBS): build
 	lintian $(DEBS)
 
 simpletest: simpletest.c proxmox-backup-qemu.h
-	gcc test.c -o simpletest -lc  -Wl,-rpath=./target/debug -L ./target/debug/ -l proxmox_backup_qemu
+	gcc simpletest.c -o simpletest -lc  -Wl,-rpath=./target/$(BUILD_MODE) -L ./target/$(BUILD_MODE) -l proxmox_backup_qemu
 
 distclean: clean
 
