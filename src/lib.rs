@@ -63,6 +63,8 @@ pub extern "C" fn proxmox_backup_connect(
     backup_id: *const c_char,
     backup_time: u64,
     password: *const c_char,
+    keyfile: *const c_char,
+    key_password: *const c_char,
     error: * mut * mut c_char,
 ) -> *mut ProxmoxBackupHandle {
 
@@ -80,7 +82,17 @@ pub extern "C" fn proxmox_backup_connect(
             Some(unsafe { CStr::from_ptr(password).to_str()?.to_owned() })
         };
 
-        let crypt_config: Option<Arc<CryptConfig>> = None; //fixme:
+        let keyfile = if keyfile == std::ptr::null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(keyfile).to_str().map(|p| std::path::PathBuf::from(p))? })
+        };
+
+        let key_password = if key_password == std::ptr::null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(key_password).to_str()?.to_owned() })
+        };
 
         Ok(BackupSetup {
             host: repo.host().to_owned(),
@@ -90,7 +102,8 @@ pub extern "C" fn proxmox_backup_connect(
             backup_id,
             password,
             backup_time,
-            crypt_config,
+            keyfile,
+            key_password,
         })
     });
 

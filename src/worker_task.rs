@@ -12,7 +12,7 @@ use tokio::runtime::Runtime;
 
 use proxmox_backup::client::*;
 use proxmox_backup::tools::BroadcastFuture;
-
+use proxmox_backup::backup::{CryptConfig, load_and_decrtypt_key};
 
 use crate::capi_types::*;
 use crate::commands::*;
@@ -32,12 +32,25 @@ impl BackupTask {
 
     pub fn new(setup: BackupSetup) -> Result<Self, Error> {
 
+        let crypt_config = match setup.keyfile {
+            None => None,
+            Some(ref path) => {
+                let (key, _) = load_and_decrtypt_key(path, & || {
+                    match setup.key_password {
+                        Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
+                        None => bail!("no key_password specified"),
+                    }
+                })?;
+                Some(Arc::new(CryptConfig::new(key)?))
+            }
+        };
+
         let (connect_tx, connect_rx) = channel(); // sync initial server connect
 
         let (command_tx, command_rx) = channel();
 
         let worker = std::thread::spawn(move ||  {
-            backup_worker_task(setup, connect_tx, command_rx)
+            backup_worker_task(setup, crypt_config, connect_tx, command_rx)
         });
 
         connect_rx.recv().unwrap()?;
@@ -96,6 +109,7 @@ fn handle_async_command<F: 'static + Send + Future<Output=Result<(), Error>>>(
 
 fn backup_worker_task(
     setup: BackupSetup,
+    crypt_config: Option<Arc<CryptConfig>>,
     connect_tx: Sender<Result<(), Error>>,
     command_rx: Receiver<BackupMessage>,
 ) -> Result<BackupTaskStats, Error>  {
@@ -141,7 +155,7 @@ fn backup_worker_task(
     let written_bytes2 = written_bytes.clone();
 
     let known_chunks = Arc::new(Mutex::new(HashSet::new()));
-    let crypt_config = setup.crypt_config.clone();
+
     let chunk_size = setup.chunk_size;
 
     runtime.spawn(async move  {
@@ -216,6 +230,7 @@ fn backup_worker_task(
                     handle_async_command(
                         finish_backup(
                             client.clone(),
+                            crypt_config.clone(),
                             registry.clone(),
                             setup.clone(),
                         ),

@@ -24,7 +24,8 @@ pub(crate) struct BackupSetup {
     pub backup_id: String,
     pub backup_time: DateTime<Utc>,
     pub password: Option<String>,
-    pub crypt_config: Option<Arc<CryptConfig>>,
+    pub keyfile: Option<std::path::PathBuf>,
+    pub key_password: Option<String>,
 }
 
 struct ImageUploadInfo {
@@ -342,6 +343,7 @@ pub(crate) async fn write_data(
 
 pub(crate) async fn finish_backup(
     client: Arc<BackupWriter>,
+    crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
     setup: BackupSetup,
 ) -> Result<(), Error> {
@@ -363,7 +365,7 @@ pub(crate) async fn finish_backup(
     };
 
     client
-        .upload_blob_from_data(index_data, "index.json.blob", setup.crypt_config.clone(), true, true)
+        .upload_blob_from_data(index_data, "index.json.blob", crypt_config, true, true)
         .await?;
 
     client.finish().await?;

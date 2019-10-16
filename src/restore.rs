@@ -34,7 +34,7 @@ impl ProxmoxRestore {
         let crypt_config = match keyfile {
             None => None,
             Some(path) => {
-                let (key, _) = load_and_decrtypt_key(&path, get_encryption_key_password)?;
+                let (key, _) = load_and_decrtypt_key(&path, &get_encryption_key_password)?;
                 Some(Arc::new(CryptConfig::new(key)?))
             }
         };
@@ -181,9 +181,9 @@ impl ProxmoxRestore {
 
         Ok(())
     }
-
 }
 
+// helper to get encrtyption key password
 fn get_encryption_key_password() -> Result<Vec<u8>, Error> {
     use std::env::VarError::*;
     match std::env::var("PBS_ENCRYPTION_PASSWORD") {
