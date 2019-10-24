@@ -4,8 +4,6 @@ use std::thread::JoinHandle;
 use std::sync::{Mutex, Arc};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Sender, Receiver};
-use std::ffi::CString;
-use std::ptr;
 
 use futures::future::{Future, Either, FutureExt};
 use tokio::runtime::Runtime;
@@ -83,25 +81,10 @@ fn handle_async_command<F: 'static + Send + Future<Output=Result<(), Error>>>(
         .map(move |either| {
             match either {
                 Either::Left((result, _)) => {
-                    match result {
-                        Ok(_) => {
-                            println!("command sucessful");
-                            unsafe { *(callback_info.error) = ptr::null_mut(); }
-                            (callback_info.callback)(callback_info.callback_data);
-                        }
-                        Err(err) => {
-                            println!("command error {}", err);
-                            let errmsg = CString::new(format!("command error: {}", err)).unwrap();
-                            unsafe { *(callback_info.error) = errmsg.into_raw(); }
-                            (callback_info.callback)(callback_info.callback_data);
-                        }
-                    }
+                    callback_info.send_result(result);
                 }
                 Either::Right(_) => { // aborted
-                    println!("command aborted");
-                    let errmsg = CString::new("copmmand aborted".to_string()).unwrap();
-                    unsafe { *(callback_info.error) = errmsg.into_raw(); }
-                    (callback_info.callback)(callback_info.callback_data);
+                    callback_info.send_result(Err(format_err!("worker aborted")));
                 }
             }
         })

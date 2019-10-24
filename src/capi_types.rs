@@ -1,6 +1,7 @@
 use failure::*;
 use std::os::raw::{c_char, c_void};
 use std::sync::{Mutex, Arc, mpsc::Sender };
+use std::ffi::CString;
 
 pub(crate) struct CallbackPointers {
     pub callback: extern "C" fn(*mut c_void),
@@ -8,6 +9,23 @@ pub(crate) struct CallbackPointers {
     pub error: * mut *mut c_char,
 }
 unsafe impl std::marker::Send for CallbackPointers {}
+
+impl CallbackPointers {
+
+    pub fn send_result(self, result: Result<(), Error>) {
+        match result {
+            Ok(_) => {
+                unsafe { *(self.error) = std::ptr::null_mut(); }
+                (self.callback)(self.callback_data);
+            }
+            Err(err) => {
+                let errmsg = CString::new(format!("command error: {}", err)).unwrap();
+                unsafe { *(self.error) = errmsg.into_raw(); }
+                (self.callback)(self.callback_data);
+            }
+        }
+    }
+}
 
 pub(crate) struct DataPointer (pub *const u8);
 unsafe impl std::marker::Send for DataPointer {}
