@@ -29,7 +29,7 @@ build:
 .PHONY: install
 install: target/release/libproxmox_backup_qemu.so
 	install -D -m 0755 target/release/libproxmox_backup_qemu.so ${DESTDIR}/usr/lib//libproxmox_backup_qemu.so.0
-	ln -s ${DESTDIR}/usr/lib//libproxmox_backup_qemu.so.0 ${DESTDIR}/usr/lib//libproxmox_backup_qemu.so
+	cd ${DESTDIR}/usr/lib/; ls *; ln -s libproxmox_backup_qemu.so.0 libproxmox_backup_qemu.so
 
 .PHONY: deb
 deb: $(DEBS)
