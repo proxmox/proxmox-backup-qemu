@@ -41,6 +41,9 @@ pub struct ProxmoxBackupHandle;
 pub(crate) enum BackupMessage {
     End,
     Abort,
+    Connect {
+        callback_info: CallbackPointers,
+    },
     AddConfig {
         name: String,
         data: DataPointer,

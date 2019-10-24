@@ -28,6 +28,14 @@ pub(crate) struct BackupSetup {
     pub key_password: Option<String>,
 }
 
+impl BackupSetup {
+
+    pub(crate) async fn connect(&self) -> Result<Arc<BackupWriter>, Error> {
+        let client = HttpClient::new(&self.host, &self.user, self.password.clone())?;
+        BackupWriter::start(client, &self.store, "vm", &self.backup_id, self.backup_time, false).await
+    }
+}
+
 struct ImageUploadInfo {
     wid: u64,
     device_name: String,

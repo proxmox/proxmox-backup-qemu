@@ -51,14 +51,9 @@ macro_rules! raise_error_int {
     }}
 }
 
-/// Start new backup
-///
-/// Open a connection to the backup servers and start a new backup
-/// task.
-///
-/// Note: This call is currently not async and can block.
+/// Create new instance
 #[no_mangle]
-pub extern "C" fn proxmox_backup_connect(
+pub extern "C" fn proxmox_backup_new(
     repo: *const c_char,
     backup_id: *const c_char,
     backup_time: u64,
@@ -68,7 +63,7 @@ pub extern "C" fn proxmox_backup_connect(
     error: * mut * mut c_char,
 ) -> *mut ProxmoxBackupHandle {
 
-    let setup: Result<_, Error> = try_block!({
+    let task: Result<_, Error> = try_block!({
         let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
         let repo: BackupRepository = repo.parse()?;
 
@@ -94,7 +89,7 @@ pub extern "C" fn proxmox_backup_connect(
             Some(unsafe { CStr::from_ptr(key_password).to_str()?.to_owned() })
         };
 
-        Ok(BackupSetup {
+        let setup = BackupSetup {
             host: repo.host().to_owned(),
             user: repo.user().to_owned(),
             store: repo.store().to_owned(),
@@ -104,21 +99,44 @@ pub extern "C" fn proxmox_backup_connect(
             backup_time,
             keyfile,
             key_password,
-        })
+        };
+
+        BackupTask::new(setup)
     });
 
-    match setup {
-        Ok(setup) => {
-            match BackupTask::new(setup) {
-                Ok(task) => {
-                    let boxed_task = Box::new(task);
-                    Box::into_raw(boxed_task) as * mut ProxmoxBackupHandle
-                }
-                Err(err) => raise_error_null!(error, err),
-            }
+    match task {
+        Ok(task) => {
+            let boxed_task = Box::new(task);
+            Box::into_raw(boxed_task) as * mut ProxmoxBackupHandle
         }
         Err(err) => raise_error_null!(error, err),
     }
+}
+
+/// Open connection to the backup server
+#[no_mangle]
+pub extern "C" fn proxmox_backup_connect_async(
+    handle: *mut ProxmoxBackupHandle,
+    callback: extern "C" fn(*mut c_void),
+    callback_data: *mut c_void,
+    error: * mut * mut c_char,
+) {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        callback(callback_data);
+        return;
+    }
+
+    let msg = BackupMessage::Connect {
+        callback_info: CallbackPointers { callback, callback_data, error },
+    };
+
+    println!("connect_async start");
+    let _res = task.command_tx.send(msg); // fixme: log errors
+    println!("connect_async end");
 }
 
 /// Abort a running backup task
