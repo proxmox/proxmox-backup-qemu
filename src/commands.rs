@@ -2,6 +2,7 @@ use failure::*;
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
 use std::ptr;
+use std::os::raw::c_int;
 
 use futures::future::{Future, TryFutureExt};
 use serde_json::{json, Value};
@@ -177,7 +178,7 @@ pub(crate) async fn close_image(
     client: Arc<BackupWriter>,
     registry: Arc<Mutex<ImageRegistry>>,
     dev_id: u8,
-) -> Result<(), Error> {
+) -> Result<c_int, Error> {
 
     println!("close image {}", dev_id);
 
@@ -216,7 +217,7 @@ pub(crate) async fn close_image(
         "csum": proxmox::tools::digest_to_hex(&upload_result.csum),
     }));
 
-    Ok(())
+    Ok(0)
 }
 
 pub(crate) async fn write_data(
@@ -229,7 +230,7 @@ pub(crate) async fn write_data(
     offset: u64,
     size: u64, // actual data size
     chunk_size: u64, // expected data size
-) -> Result<(), Error> {
+) -> Result<c_int, Error> {
 
     println!("dev {}: write {} {}", dev_id, offset, size);
 
@@ -346,7 +347,7 @@ pub(crate) async fn write_data(
 
     println!("upload chunk sucessful");
 
-    Ok(())
+    Ok(size as c_int)
 }
 
 pub(crate) async fn finish_backup(
@@ -354,7 +355,7 @@ pub(crate) async fn finish_backup(
     crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
     setup: BackupSetup,
-) -> Result<(), Error> {
+) -> Result<c_int, Error> {
 
     println!("call finish");
 
@@ -378,5 +379,5 @@ pub(crate) async fn finish_backup(
 
     client.finish().await?;
 
-    Ok(())
+    Ok(0)
 }

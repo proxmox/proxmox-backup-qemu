@@ -51,7 +51,7 @@ macro_rules! raise_error_int {
     }}
 }
 
-/// Create new instance
+/// Create a new instance
 #[no_mangle]
 pub extern "C" fn proxmox_backup_new(
     repo: *const c_char,
@@ -119,19 +119,20 @@ pub extern "C" fn proxmox_backup_connect_async(
     handle: *mut ProxmoxBackupHandle,
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
-    error: * mut * mut c_char,
+    result: *mut c_int,
+    error: *mut *mut c_char,
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
 
     if let Some(_reason) = &task.aborted {
         let errmsg = CString::new("task already aborted".to_string()).unwrap();
-        unsafe { *error =  errmsg.into_raw(); }
+        unsafe { *result = -1; *error =  errmsg.into_raw(); }
         callback(callback_data);
         return;
     }
 
     let msg = BackupMessage::Connect {
-        callback_info: CallbackPointers { callback, callback_data, error },
+        callback_info: CallbackPointers { callback, callback_data, error, result },
     };
 
     println!("connect_async start");
@@ -252,14 +253,14 @@ pub extern "C" fn proxmox_backup_write_data_async(
     size: u64,
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
+    result: *mut c_int,
     error: * mut * mut c_char,
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
-        let errmsg = CString::new("task already aborted".to_string()).unwrap();
-        unsafe { *error =  errmsg.into_raw(); }
-        callback(callback_data);
+        callback_info.send_result(Err(format_err!("task already aborted")));
         return;
     }
 
@@ -268,7 +269,7 @@ pub extern "C" fn proxmox_backup_write_data_async(
         data: DataPointer(data),
         offset,
         size,
-        callback_info: CallbackPointers { callback, callback_data, error },
+        callback_info,
     };
 
     println!("write_data_async start");
@@ -285,21 +286,18 @@ pub extern "C" fn proxmox_backup_close_image_async(
     dev_id: u8,
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
+    result: *mut c_int,
     error: * mut * mut c_char,
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
-        let errmsg = CString::new("task already aborted".to_string()).unwrap();
-        unsafe { *error =  errmsg.into_raw(); }
-        callback(callback_data);
+        callback_info.send_result(Err(format_err!("task already aborted")));
         return;
     }
 
-    let msg = BackupMessage::CloseImage {
-        dev_id,
-        callback_info: CallbackPointers { callback, callback_data, error },
-    };
+    let msg = BackupMessage::CloseImage { dev_id, callback_info };
 
     println!("close_image_async start");
     let _res = task.command_tx.send(msg); // fixme: log errors
@@ -315,20 +313,18 @@ pub extern "C" fn proxmox_backup_finish_async(
     handle: *mut ProxmoxBackupHandle,
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
+    result: *mut c_int,
     error: * mut * mut c_char,
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
-        let errmsg = CString::new("task already aborted".to_string()).unwrap();
-        unsafe { *error =  errmsg.into_raw(); }
-        callback(callback_data);
+        callback_info.send_result(Err(format_err!("task already aborted")));
         return;
     }
 
-    let msg = BackupMessage::Finish {
-        callback_info: CallbackPointers { callback, callback_data, error },
-    };
+    let msg = BackupMessage::Finish { callback_info };
 
     println!("finish_async start");
     let _res = task.command_tx.send(msg); // fixme: log errors

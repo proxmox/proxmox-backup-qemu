@@ -4,6 +4,7 @@ use std::thread::JoinHandle;
 use std::sync::{Mutex, Arc};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Sender, Receiver};
+use std::os::raw::c_int;
 
 use futures::future::{Future, Either, FutureExt};
 
@@ -59,7 +60,7 @@ impl BackupTask {
     }
 }
 
-fn handle_async_command<F: 'static + Send + Future<Output=Result<(), Error>>>(
+fn handle_async_command<F: 'static + Send + Future<Output=Result<c_int, Error>>>(
     command_future: F,
     abort_future: impl 'static + Send + Future<Output=Result<(), Error>>,
     callback_info: CallbackPointers,
@@ -132,7 +133,7 @@ fn backup_worker_task(
                 BackupMessage::Connect { callback_info } => {
                     client = match setup.connect().await {
                         Ok(client) => {
-                            callback_info.send_result(Ok(()));
+                            callback_info.send_result(Ok(0));
                             Some(client)
                         }
                         Err(err) => {
