@@ -60,7 +60,7 @@ pub(crate) enum BackupMessage {
         name: String,
         data: DataPointer,
         size: u64,
-        result_channel: Arc<Mutex<Sender<Result<(), Error>>>>,
+        callback_info: CallbackPointers,
     },
     RegisterImage {
         device_name: String,

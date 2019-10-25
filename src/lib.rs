@@ -203,42 +203,37 @@ pub extern "C" fn proxmox_backup_register_image(
 /// Add a configuration blob to the backup
 ///
 /// Create and upload a data blob "<name>.blob".
-///
-/// Note: This call is currently not async and can block.
 #[no_mangle]
-pub extern "C" fn proxmox_backup_add_config(
+pub extern "C" fn proxmox_backup_add_config_async(
     handle: *mut ProxmoxBackupHandle,
     name: *const c_char, // expect utf8 here
     data: *const u8,
     size: u64,
+    callback: extern "C" fn(*mut c_void),
+    callback_data: *mut c_void,
+    result: *mut c_int,
     error: * mut * mut c_char,
-) -> c_int {
+) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
-        raise_error_int!(error, "task already aborted");
+        callback_info.send_result(Err(format_err!("task already aborted")));
+        return;
     }
 
     let name = unsafe { CStr::from_ptr(name).to_string_lossy().to_string() };
-
-    let (result_sender, result_receiver) = channel();
 
     let msg = BackupMessage::AddConfig {
         name,
         data: DataPointer(data),
         size,
-        result_channel: Arc::new(Mutex::new(result_sender)),
+        callback_info,
     };
 
     println!("add config start");
     let _res = task.command_tx.send(msg); // fixme: log errors
     println!("add config send end");
-
-    match result_receiver.recv() {
-        Err(err) => raise_error_int!(error, format!("channel recv error: {}", err)),
-        Ok(Err(err)) => raise_error_int!(error, err.to_string()),
-        Ok(Ok(())) => 0,
-    }
 }
 
 /// Write data to into a registered image

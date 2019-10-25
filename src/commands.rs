@@ -111,7 +111,7 @@ pub(crate) async fn add_config(
     name: String,
     data: DataPointer,
     size: u64,
-) -> Result<(), Error> {
+) -> Result<c_int, Error> {
     println!("add config {} size {}", name, size);
 
     let blob_name = format!("{}.blob", name);
@@ -128,7 +128,7 @@ pub(crate) async fn add_config(
         "csum": proxmox::tools::digest_to_hex(&stats.csum),
     }));
 
-    Ok(())
+    Ok(0)
 }
 
 pub(crate) async fn register_image(

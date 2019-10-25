@@ -153,22 +153,24 @@ fn backup_worker_task(
                     println!("worker got end mesage");
                     break;
                 }
-                BackupMessage::AddConfig { name, data, size, result_channel } => {
+                BackupMessage::AddConfig { name, data, size, callback_info } => {
                     match client {
                         Some(ref client) => {
-                            let res = add_config(
-                                client.clone(),
-                                crypt_config.clone(),
-                                registry.clone(),
-                                name,
-                                data,
-                                size,
+                            handle_async_command(
+                                add_config(
+                                    client.clone(),
+                                    crypt_config.clone(),
+                                    registry.clone(),
+                                    name,
+                                    data,
+                                    size,
+                                ),
+                                abort.listen(),
+                                callback_info,
                             ).await;
-
-                            let _ = result_channel.lock().unwrap().send(res);
                         }
                         None => {
-                           let _ = result_channel.lock().unwrap().send(Err(format_err!("not connected")));
+                            callback_info.send_result(Err(format_err!("not connected")));
                         }
                     }
                 }
