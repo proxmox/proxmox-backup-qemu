@@ -174,22 +174,25 @@ fn backup_worker_task(
                         }
                     }
                 }
-                BackupMessage::RegisterImage { device_name, size, result_channel } => {
+                BackupMessage::RegisterImage { device_name, size, callback_info} => {
                     match client {
                         Some(ref client) => {
-                            let res = register_image(
-                                client.clone(),
-                                crypt_config.clone(),
-                                registry.clone(),
-                                known_chunks.clone(),
-                                device_name,
-                                size,
-                                chunk_size,
+                            handle_async_command(
+                                register_image(
+                                    client.clone(),
+                                    crypt_config.clone(),
+                                    registry.clone(),
+                                    known_chunks.clone(),
+                                    device_name,
+                                    size,
+                                    chunk_size,
+                                ),
+                                abort.listen(),
+                                callback_info,
                             ).await;
-                            let _ = result_channel.lock().unwrap().send(res);
                         }
                         None => {
-                           let _ = result_channel.lock().unwrap().send(Err(format_err!("not connected")));
+                            callback_info.send_result(Err(format_err!("not connected")));
                         }
                     }
                 }

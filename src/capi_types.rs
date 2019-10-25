@@ -1,6 +1,5 @@
 use failure::*;
 use std::os::raw::{c_char, c_void, c_int};
-use std::sync::{Mutex, Arc, mpsc::Sender };
 use std::ffi::CString;
 
 pub(crate) struct CallbackPointers {
@@ -65,7 +64,7 @@ pub(crate) enum BackupMessage {
     RegisterImage {
         device_name: String,
         size: u64,
-        result_channel: Arc<Mutex<Sender<Result<u8, Error>>>>,
+        callback_info: CallbackPointers,
     },
     CloseImage {
         dev_id: u8,

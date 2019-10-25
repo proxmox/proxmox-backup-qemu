@@ -1,6 +1,4 @@
 use failure::*;
-use std::sync::{Mutex, Arc};
-use std::sync::mpsc::channel;
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::os::raw::{c_uchar, c_char, c_int, c_void};
@@ -167,37 +165,30 @@ pub extern "C" fn proxmox_backup_abort(
 ///
 /// Note: This call is currently not async and can block.
 #[no_mangle]
-pub extern "C" fn proxmox_backup_register_image(
+pub extern "C" fn proxmox_backup_register_image_async(
     handle: *mut ProxmoxBackupHandle,
     device_name: *const c_char, // expect utf8 here
     size: u64,
+    callback: extern "C" fn(*mut c_void),
+    callback_data: *mut c_void,
+    result: *mut c_int,
     error: * mut * mut c_char,
-) -> c_int {
+) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
-        raise_error_int!(error, "task already aborted");
+        callback_info.send_result(Err(format_err!("task already aborted")));
+        return;
     }
 
     let device_name = unsafe { CStr::from_ptr(device_name).to_string_lossy().to_string() };
 
-    let (result_sender, result_receiver) = channel();
-
-    let msg = BackupMessage::RegisterImage {
-        device_name,
-        size,
-        result_channel: Arc::new(Mutex::new(result_sender)),
-    };
+    let msg = BackupMessage::RegisterImage { device_name, size, callback_info };
 
     println!("register_image_async start");
     let _res = task.command_tx.send(msg); // fixme: log errors
     println!("register_image_async send end");
-
-    match result_receiver.recv() {
-        Err(err) => raise_error_int!(error, format!("channel recv error: {}", err)),
-        Ok(Err(err)) => raise_error_int!(error, err.to_string()),
-        Ok(Ok(result)) => result as c_int,
-    }
 }
 
 /// Add a configuration blob to the backup

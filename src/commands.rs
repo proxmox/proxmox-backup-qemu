@@ -139,7 +139,7 @@ pub(crate) async fn register_image(
     device_name: String,
     device_size: u64,
     chunk_size: u64,
-) -> Result<u8, Error> {
+) -> Result<c_int, Error> {
     println!("register image {} size {}", device_name, device_size);
 
     let archive_name = format!("{}.img.fidx", device_name);
@@ -171,7 +171,9 @@ pub(crate) async fn register_image(
    };
 
     let mut guard = registry.lock().unwrap();
-    guard.register(info)
+    let dev_id = guard.register(info)?;
+
+    Ok(dev_id as c_int)
 }
 
 pub(crate) async fn close_image(
