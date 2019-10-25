@@ -11,12 +11,13 @@
  *
  * NOTE: Async Commands
  *
- * Some command are asynchronous (marked as _async). They run in a
+ * Most commands are asynchronous (marked as _async). They run in a
  * separate thread and have the following parameters:
  *
  * callback: extern "C" fn(*mut c_void),
  * callback_data: *mut c_void,
- * error: * mut * mut c_char,
+ * result: *mut c_int,
+ * error: *mut *mut c_char,
  *
  * The callback function is called when the the async function is
  * ready. Possible errors are returned in 'error'.
