@@ -30,7 +30,9 @@ use restore::*;
 /// and free the allocated memory.
 #[no_mangle]
 pub extern "C" fn proxmox_backup_free_error(ptr: * mut c_char) {
-    unsafe { CString::from_raw(ptr); }
+    if ptr != std::ptr::null_mut() {
+        unsafe { CString::from_raw(ptr); }
+    }
 }
 
 macro_rules! raise_error_null {
