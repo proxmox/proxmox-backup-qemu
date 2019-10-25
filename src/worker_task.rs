@@ -49,7 +49,7 @@ impl BackupTask {
             backup_worker_task(setup, crypt_config, connect_tx, command_rx)
         });
 
-        connect_rx.recv().unwrap()?;
+        let _worker_start_result = connect_rx.recv()??;
 
         Ok(BackupTask {
             worker,
@@ -94,12 +94,12 @@ fn backup_worker_task(
     let runtime = match builder.build() {
         Ok(runtime) => runtime,
         Err(err) =>  {
-            connect_tx.send(Err(format_err!("create runtime failed: {}", err))).unwrap();
+            connect_tx.send(Err(format_err!("create runtime failed: {}", err)))?;
             bail!("create runtime failed");
         }
     };
 
-    connect_tx.send(Ok(())).unwrap();
+    connect_tx.send(Ok(()))?;
     drop(connect_tx); // no longer needed
 
     let mut client = None;
