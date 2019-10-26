@@ -21,7 +21,7 @@ pub(crate) struct BackupTask {
 }
 
 #[derive(Debug)]
-pub(crate) struct BackupTaskStats {
+pub(crate) struct BackupTaskStats { // fixme: do we really need this?
     written_bytes: u64,
 }
 
@@ -50,7 +50,7 @@ impl BackupTask {
             backup_worker_task(setup, crypt_config, connect_tx, command_rx)
         });
 
-        let _worker_start_result = connect_rx.recv()??;
+        connect_rx.recv()??; // sync
 
         Ok(BackupTask {
             worker,
@@ -130,7 +130,7 @@ fn backup_worker_task(
             // Note: command_rx.recv() may block one thread, because there are
             // still enough threads to do the work
             let msg = command_rx.recv();
-            if let Err(_) = msg {
+            if msg.is_err() {
                 // sender closed channel, try to abort and then end the loop
                 let _ = abort_tx.send(()).await;
                 break;

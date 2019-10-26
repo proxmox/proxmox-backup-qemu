@@ -20,16 +20,18 @@ pub(crate) struct UploadResult {
     pub bytes_written: u64,
 }
 
+pub(crate) type UploadQueueSender = mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>;
+type UploadQueueReceiver = mpsc::Receiver<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>;
+pub(crate) type UploadResultReceiver = oneshot::Receiver<Result<UploadResult, Error>>;
+type UploadResultSender = oneshot::Sender<Result<UploadResult, Error>>;
+
 pub(crate) fn create_upload_queue(
     client: Arc<BackupWriter>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     wid: u64,
     device_size: u64,
     chunk_size: u64,
-) -> (
-    mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>,
-    oneshot::Receiver<Result<UploadResult, Error>>,
-) {
+) -> (UploadQueueSender, UploadResultReceiver) {
     let (upload_queue_tx, upload_queue_rx) = mpsc::channel(100);
     let (upload_result_tx, upload_result_rx) = oneshot::channel();
 
@@ -71,8 +73,8 @@ async fn upload_handler(
     wid: u64,
     device_size: u64,
     chunk_size: u64,
-    mut upload_queue: mpsc::Receiver<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>,
-    upload_result: oneshot::Sender<Result<UploadResult, Error>>,
+    mut upload_queue: UploadQueueReceiver,
+    upload_result: UploadResultSender,
 ) {
     let mut chunk_count = 0;
     let mut bytes_written = 0;
@@ -118,7 +120,7 @@ async fn upload_handler(
         }
     }
 
-    if digest_list.len() > 0 {
+    if !digest_list.is_empty() {
         if let Err(err) = upload_chunk_list(client.clone(), wid, &mut digest_list, &mut offset_list).await {
             let _ = upload_result.send(Err(err));
             return;

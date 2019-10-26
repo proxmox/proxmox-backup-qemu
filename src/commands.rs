@@ -1,12 +1,10 @@
 use failure::*;
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
-use std::ptr;
 use std::os::raw::c_int;
 
 use futures::future::{Future, TryFutureExt};
 use serde_json::{json, Value};
-use tokio::sync::{mpsc, oneshot};
 
 use proxmox_backup::backup::*;
 use proxmox_backup::client::*;
@@ -42,8 +40,8 @@ struct ImageUploadInfo {
     device_name: String,
     zero_chunk_digest: [u8; 32],
     device_size: u64,
-    upload_queue: Option<mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>>,
-    upload_result: Option<oneshot::Receiver<Result<UploadResult, Error>>>,
+    upload_queue: Option<UploadQueueSender>,
+    upload_result: Option<UploadResultReceiver>,
 }
 
 pub (crate) struct ImageRegistry {
@@ -222,6 +220,7 @@ pub(crate) async fn close_image(
     Ok(0)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn write_data(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
@@ -256,12 +255,12 @@ pub(crate) async fn write_data(
     let end_offset = offset + chunk_size;
     if end_offset > device_size {
         bail!("write_data: write out of range");
-    } if end_offset < device_size && size != chunk_size {
+    } else if end_offset < device_size && size != chunk_size {
         bail!("write_data: chunk too small {}", size);
     }
 
     let upload_future: Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin> = {
-        if data.0 == ptr::null() {
+        if data.0.is_null() {
             if size != chunk_size {
                 bail!("write_data: got invalid null chunk");
             }
@@ -312,7 +311,7 @@ pub(crate) async fn write_data(
                     .map_err(Error::from)
                     .and_then(H2Client::h2api_response)
                     .map_ok(move |_| {
-                        ChunkUploadInfo { digest: digest, offset, size, chunk_is_known: false }
+                        ChunkUploadInfo { digest, offset, size, chunk_is_known: false }
                     })
                     .map_err(|err| format_err!("pipelined request failed: {}", err));
 
@@ -324,7 +323,7 @@ pub(crate) async fn write_data(
     match upload_queue {
         Some(ref mut upload_queue) => {
             // Phase 2: send reponse future to other task
-            if let Err(_) = upload_queue.send(upload_future).await {
+            if upload_queue.send(upload_future).await.is_err() {
                 let upload_result = {
                     let mut guard = registry.lock().unwrap();
                     let info = guard.lookup(dev_id)?;

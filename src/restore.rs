@@ -187,7 +187,7 @@ impl ProxmoxRestore {
 fn get_encryption_key_password() -> Result<Vec<u8>, Error> {
     use std::env::VarError::*;
     match std::env::var("PBS_ENCRYPTION_PASSWORD") {
-        Ok(p) => return Ok(p.as_bytes().to_vec()),
+        Ok(p) => Ok(p.as_bytes().to_vec()),
         Err(NotUnicode(_)) => bail!("PBS_ENCRYPTION_PASSWORD contains bad characters"),
         Err(NotPresent) => {
             bail!("env PBS_ENCRYPTION_PASSWORD not set");

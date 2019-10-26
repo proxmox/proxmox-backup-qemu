@@ -16,7 +16,7 @@ impl CallbackPointers {
         match result {
             Ok(ret) => {
                 unsafe {
-                    if self.result != std::ptr::null_mut() {
+                    if !self.result.is_null() {
                         *(self.result) = ret;
                     }
                 }
@@ -25,10 +25,10 @@ impl CallbackPointers {
             Err(err) => {
                 let errmsg = CString::new(format!("command error: {}", err)).unwrap();
                 unsafe {
-                    if self.result != std::ptr::null_mut() {
+                    if !self.result.is_null() {
                         *(self.result) = -1;
                     }
-                    if self.error !=  std::ptr::null_mut() {
+                    if !self.error.is_null() {
                         *(self.error) = errmsg.into_raw();
                     }
                 }

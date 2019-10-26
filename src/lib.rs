@@ -29,8 +29,9 @@ use restore::*;
 /// the rust standard library. This call moves ownership back to rust
 /// and free the allocated memory.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_free_error(ptr: * mut c_char) {
-    if ptr != std::ptr::null_mut() {
+    if !ptr.is_null() {
         unsafe { CString::from_raw(ptr); }
     }
 }
@@ -53,6 +54,7 @@ macro_rules! raise_error_int {
 
 /// Create a new instance
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_new(
     repo: *const c_char,
     backup_id: *const c_char,
@@ -71,19 +73,19 @@ pub extern "C" fn proxmox_backup_new(
 
         let backup_time = Utc.timestamp(backup_time as i64, 0);
 
-        let password = if password == std::ptr::null() {
+        let password = if password.is_null() {
             None
         } else {
             Some(unsafe { CStr::from_ptr(password).to_str()?.to_owned() })
         };
 
-        let keyfile = if keyfile == std::ptr::null() {
+        let keyfile = if keyfile.is_null() {
             None
         } else {
-            Some(unsafe { CStr::from_ptr(keyfile).to_str().map(|p| std::path::PathBuf::from(p))? })
+            Some(unsafe { CStr::from_ptr(keyfile).to_str().map(std::path::PathBuf::from)? })
         };
 
-        let key_password = if key_password == std::ptr::null() {
+        let key_password = if key_password.is_null() {
             None
         } else {
             Some(unsafe { CStr::from_ptr(key_password).to_str()?.to_owned() })
@@ -115,6 +117,7 @@ pub extern "C" fn proxmox_backup_new(
 
 /// Open connection to the backup server
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_connect_async(
     handle: *mut ProxmoxBackupHandle,
     callback: extern "C" fn(*mut c_void),
@@ -146,6 +149,7 @@ pub extern "C" fn proxmox_backup_connect_async(
 /// proxmox_backup_disconnect() to close the connection and free
 /// allocated memory.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_abort(
     handle: *mut ProxmoxBackupHandle,
     reason: *const c_char,
@@ -167,6 +171,7 @@ pub extern "C" fn proxmox_backup_abort(
 ///
 /// Note: This call is currently not async and can block.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_register_image_async(
     handle: *mut ProxmoxBackupHandle,
     device_name: *const c_char, // expect utf8 here
@@ -197,6 +202,7 @@ pub extern "C" fn proxmox_backup_register_image_async(
 ///
 /// Create and upload a data blob "<name>.blob".
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_add_config_async(
     handle: *mut ProxmoxBackupHandle,
     name: *const c_char, // expect utf8 here
@@ -233,6 +239,7 @@ pub extern "C" fn proxmox_backup_add_config_async(
 ///
 /// Upload a chunk of data for the <dev_id> image.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_write_data_async(
     handle: *mut ProxmoxBackupHandle,
     dev_id: u8,
@@ -269,6 +276,7 @@ pub extern "C" fn proxmox_backup_write_data_async(
 ///
 /// Mark the image as closed. Further writes are not possible.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_close_image_async(
     handle: *mut ProxmoxBackupHandle,
     dev_id: u8,
@@ -297,6 +305,7 @@ pub extern "C" fn proxmox_backup_close_image_async(
 /// Finish the backup by creating and uploading the backup manifest.
 /// All registered images have to be closed before calling this.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_finish_async(
     handle: *mut ProxmoxBackupHandle,
     callback: extern "C" fn(*mut c_void),
@@ -324,6 +333,7 @@ pub extern "C" fn proxmox_backup_finish_async(
 ///
 /// The handle becomes invalid after this call.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 
     println!("diconnect");
@@ -361,6 +371,7 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 ///
 /// Note: This implementation is not async
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_connect(
     repo: *const c_char,
     snapshot: *const c_char,
@@ -372,10 +383,10 @@ pub extern "C" fn proxmox_restore_connect(
         let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
         let repo: BackupRepository = repo.parse()?;
 
-        let keyfile = if keyfile == std::ptr::null() {
+        let keyfile = if keyfile.is_null() {
             None
         } else {
-            Some(unsafe { CStr::from_ptr(keyfile).to_str().map(|p| std::path::PathBuf::from(p))? })
+            Some(unsafe { CStr::from_ptr(keyfile).to_str().map(std::path::PathBuf::from)? })
         };
 
         let snapshot = unsafe { CStr::from_ptr(snapshot).to_string_lossy().into_owned() };
@@ -397,6 +408,7 @@ pub extern "C" fn proxmox_restore_connect(
 ///
 /// The handle becomes invalid after this call.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) {
 
     let conn = handle as * mut ProxmoxRestore;
@@ -407,6 +419,7 @@ pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) 
 ///
 /// Image data is downloaded and sequentially dumped to the callback.
 #[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_image(
     handle: *mut ProxmoxRestoreHandle,
     archive_name: *const c_char, // expect full name here, i.e. "name.img.fidx"
@@ -439,5 +452,5 @@ pub extern "C" fn proxmox_restore_image(
         raise_error_int!(error, err);
     };
 
-    return 0;
+    0
 }
