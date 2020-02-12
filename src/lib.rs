@@ -3,7 +3,7 @@ use std::ffi::{CStr, CString};
 use std::ptr;
 use std::os::raw::{c_uchar, c_char, c_int, c_void};
 
-use proxmox::tools::try_block;
+use proxmox::try_block;
 use proxmox_backup::backup::*;
 use proxmox_backup::client::BackupRepository;
 

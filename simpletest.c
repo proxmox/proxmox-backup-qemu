@@ -22,11 +22,11 @@ void main(int argc, char **argv) {
 
   char *pbs_error = NULL;
 
-  ProxmoxBackupHandle *pbs = proxmox_backup_connect
+  ProxmoxBackupHandle *pbs = proxmox_backup_new
     (repository, backup_id, backup_time, NULL, NULL, NULL, &pbs_error);
 
   if (pbs == NULL) {
-    fprintf(stderr, "proxmox_backup_connect failed - %s\n", pbs_error);
+    fprintf(stderr, "proxmox_backup_new failed - %s\n", pbs_error);
     proxmox_backup_free_error(pbs_error);
     exit(-1);
   }

@@ -30,7 +30,10 @@ pub(crate) struct BackupSetup {
 impl BackupSetup {
 
     pub(crate) async fn connect(&self) -> Result<Arc<BackupWriter>, Error> {
-        let client = HttpClient::new(&self.host, &self.user, self.password.clone())?;
+        let options = HttpClientOptions::new()
+            .password(self.password.clone());
+
+        let client = HttpClient::new(&self.host, &self.user, options)?;
         BackupWriter::start(client, &self.store, "vm", &self.backup_id, self.backup_time, false).await
     }
 }

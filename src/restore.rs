@@ -2,11 +2,11 @@ use failure::*;
 use std::sync::Arc;
 use std::os::unix::fs::OpenOptionsExt;
 
+use proxmox_backup::tools::runtime::block_on;
 use proxmox_backup::backup::*;
-use proxmox_backup::client::{HttpClient, BackupReader, BackupRepository, RemoteChunkReader};
+use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, BackupRepository, RemoteChunkReader};
 
 pub(crate) struct ProxmoxRestore {
-    pub runtime: tokio::runtime::Runtime,
     pub client: Arc<BackupReader>,
     pub crypt_config: Option<Arc<CryptConfig>>,
     pub manifest: BackupManifest,
@@ -34,23 +34,16 @@ impl ProxmoxRestore {
         let crypt_config = match keyfile {
             None => None,
             Some(path) => {
-                let (key, _) = load_and_decrtypt_key(&path, &get_encryption_key_password)?;
+                let (key, _) = load_and_decrypt_key(&path, &get_encryption_key_password)?;
                 Some(Arc::new(CryptConfig::new(key)?))
             }
         };
 
-        let mut builder = tokio::runtime::Builder::new();
-        builder.core_threads(4);
-        builder.name_prefix("pbs-restore-");
+        let result: Result<_, Error> = block_on(async {
 
-        let runtime = builder
-            .build()
-            .map_err(|err| format_err!("create runtime failed - {}", err))?;
+            let options = HttpClientOptions::new();
 
-
-        let result: Result<_, Error> = runtime.block_on(async {
-
-            let client = HttpClient::new(&host, &user, None)?;
+            let client = HttpClient::new(&host, &user, options)?;
             let client = BackupReader::start(
                 client,
                 crypt_config.clone(),
@@ -69,7 +62,6 @@ impl ProxmoxRestore {
         let (client, manifest) = result?;
 
         Ok(Self {
-            runtime,
             manifest,
             client,
             crypt_config,
@@ -77,7 +69,7 @@ impl ProxmoxRestore {
     }
 
     pub fn restore(
-        &self,
+        &mut self,
         archive_name: String,
         write_data_callback: impl Fn(u64, &[u8]) -> i32,
         write_zero_callback: impl Fn(u64, u64) -> i32,
@@ -88,7 +80,7 @@ impl ProxmoxRestore {
             bail!("wrong archive type {:?}", archive_name);
         }
 
-        self.runtime.block_on(
+        block_on(
             self.restore_async(
                 archive_name,
                 write_data_callback,

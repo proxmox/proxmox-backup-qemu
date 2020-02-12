@@ -9,7 +9,7 @@ use std::os::raw::c_int;
 use futures::future::{Future, Either, FutureExt};
 
 use proxmox_backup::tools::BroadcastFuture;
-use proxmox_backup::backup::{CryptConfig, load_and_decrtypt_key};
+use proxmox_backup::backup::{CryptConfig, load_and_decrypt_key};
 
 use crate::capi_types::*;
 use crate::commands::*;
@@ -32,7 +32,7 @@ impl BackupTask {
         let crypt_config = match setup.keyfile {
             None => None,
             Some(ref path) => {
-                let (key, _) = load_and_decrtypt_key(path, & || {
+                let (key, _) = load_and_decrypt_key(path, & || {
                     match setup.key_password {
                         Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
                         None => bail!("no key_password specified"),
@@ -88,9 +88,9 @@ fn backup_worker_task(
 
     let mut builder = tokio::runtime::Builder::new();
 
-    builder.blocking_threads(1);
+    builder.max_threads(6);
     builder.core_threads(4);
-    builder.name_prefix("proxmox-backup-qemu-");
+    builder.thread_name("proxmox-backup-qemu-worker");
 
     let runtime = match builder.build() {
         Ok(runtime) => runtime,
@@ -260,8 +260,9 @@ fn backup_worker_task(
         println!("worker end loop");
     });
 
-    runtime.shutdown_on_idle();
+    //runtime.shutdown_on_idle();
 
+    // fixme: stats is always 0 here
     let stats = BackupTaskStats { written_bytes: written_bytes.fetch_add(0, Ordering::SeqCst)  };
     Ok(stats)
 }

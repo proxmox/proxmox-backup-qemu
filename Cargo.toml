@@ -12,18 +12,18 @@ build = "build.rs"
 crate-type = ['lib', 'cdylib', 'staticlib']
 
 [build-dependencies]
-cbindgen = "0.9.1"
+cbindgen = "0.13.1"
 
 [dependencies]
 libc = "0.2"
-bytes = "0.4"
-proxmox = { git = "ssh://gitolite3@proxdev.maurer-it.com/rust/proxmox", version = "0.1" }
+bytes = "0.5"
+proxmox = { version = "0.1.13", features = [ "sortable-macro", "api-macro" ] }
 proxmox-backup = { path = "../proxmox-backup" }
 chrono = "0.4" # Date and time library for Rust
 failure = "0.1"
-futures-preview = "0.3.0-alpha"
+futures = "0.3"
 serde_json = "1.0"
-tokio = { version = "0.2.0-alpha.4" }
+tokio = { version = "0.2.9", features = [ "blocking", "fs", "io-util", "macros", "rt-threaded", "signal", "stream", "tcp", "time", "uds" ] }
 openssl = "0.10"
-h2 = { version = "0.2.0-alpha.1", features = ["stream"] }
+h2 = { version = "0.2", features = ["stream"] }
 
