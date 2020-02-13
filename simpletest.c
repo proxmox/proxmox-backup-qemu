@@ -25,7 +25,7 @@ void main(int argc, char **argv) {
   char *fingerprint = getenv("PBS_FINGERPRINT");
 
   ProxmoxBackupHandle *pbs = proxmox_backup_new
-    (repository, backup_id, backup_time, password, NULL, NULL, fingerprint, &pbs_error);
+    (repository, backup_id, backup_time, PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, password, NULL, NULL, fingerprint, &pbs_error);
 
   if (pbs == NULL) {
     fprintf(stderr, "proxmox_backup_new failed - %s\n", pbs_error);
@@ -50,11 +50,9 @@ void main(int argc, char **argv) {
 
 
   int img_chunks = 16;
-  int chunk_size = 1024*1024*4;
 
-  // fixme: chunk size ??
   printf("register_image\n");
-  int dev_id = proxmox_backup_register_image(pbs, "scsi-drive0", chunk_size*img_chunks, &pbs_error);
+  int dev_id = proxmox_backup_register_image(pbs, "scsi-drive0", PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE*img_chunks, &pbs_error);
   if (dev_id < 0) {
     fprintf(stderr, "proxmox_backup_register_image failed - %s\n", pbs_error);
     proxmox_backup_free_error(pbs_error);
@@ -63,7 +61,7 @@ void main(int argc, char **argv) {
 
   for (int i = 0; i < img_chunks; i++) {
     printf("write a single chunk %d\n", i);
-    proxmox_backup_write_data(pbs, dev_id, NULL, i*chunk_size, chunk_size, &pbs_error);
+    proxmox_backup_write_data(pbs, dev_id, NULL, i*PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, &pbs_error);
   }
 
   printf("close_image\n");

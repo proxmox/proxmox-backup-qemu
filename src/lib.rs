@@ -24,6 +24,8 @@ use worker_task::*;
 mod restore;
 use restore::*;
 
+pub const PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE: u64 = 1024*1024*4;
+
 /// Free returned error messages
 ///
 /// All calls can return error messages, but they are allocated using
@@ -105,12 +107,15 @@ impl GotResultCondition {
 }
 
 /// Create a new instance
+///
+/// Uses `PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE` if `chunk_size` is zero.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_new(
     repo: *const c_char,
     backup_id: *const c_char,
     backup_time: u64,
+    chunk_size: u64,
     password: *const c_char,
     keyfile: *const c_char,
     key_password: *const c_char,
@@ -154,7 +159,7 @@ pub extern "C" fn proxmox_backup_new(
             host: repo.host().to_owned(),
             user: repo.user().to_owned(),
             store: repo.store().to_owned(),
-            chunk_size: 4*1024*1024,
+            chunk_size: if chunk_size > 0 { chunk_size } else { PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE },
             backup_id,
             password,
             backup_time,
