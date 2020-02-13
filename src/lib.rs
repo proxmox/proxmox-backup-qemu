@@ -2,6 +2,7 @@ use failure::*;
 use std::ffi::{CStr, CString};
 use std::ptr;
 use std::os::raw::{c_uchar, c_char, c_int, c_void};
+use std::sync::{Mutex, Condvar};
 
 use proxmox::try_block;
 use proxmox_backup::backup::*;
@@ -52,6 +53,57 @@ macro_rules! raise_error_int {
     }}
 }
 
+// helper class to implement synchrounous interface
+struct GotResultCondition {
+    lock: Mutex<bool>,
+    cond: Condvar,
+}
+
+impl GotResultCondition {
+
+    pub fn new() -> Self {
+        Self {
+            lock: Mutex::new(false),
+            cond: Condvar::new(),
+        }
+    }
+
+    /// Create CallbackPointers
+    ///
+    /// wait() returns If the contained callback is called.
+    pub fn callback_info(
+        &mut self,
+        result: *mut c_int,
+        error: *mut *mut c_char,
+    ) -> CallbackPointers {
+        CallbackPointers {
+            callback: Self::wakeup_callback,
+            callback_data: (self) as *mut _ as *mut c_void,
+            error,
+            result: result,
+        }
+    }
+
+    /// Waits until the callback from callback_info is called.
+    pub fn wait(&mut self) {
+        let mut done = self.lock.lock().unwrap();
+        while !*done {
+            done = self.cond.wait(done).unwrap();
+        }
+    }
+
+    #[no_mangle]
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    extern "C" fn wakeup_callback(
+        callback_data: *mut c_void,
+    ) {
+        let callback_data = unsafe { &mut *( callback_data as * mut GotResultCondition) };
+        let mut done = callback_data.lock.lock().unwrap();
+        *done = true;
+        callback_data.cond.notify_one();
+    }
+}
+
 /// Create a new instance
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -62,6 +114,7 @@ pub extern "C" fn proxmox_backup_new(
     password: *const c_char,
     keyfile: *const c_char,
     key_password: *const c_char,
+    fingerprint: *const c_char,
     error: * mut * mut c_char,
 ) -> *mut ProxmoxBackupHandle {
 
@@ -91,6 +144,12 @@ pub extern "C" fn proxmox_backup_new(
             Some(unsafe { CStr::from_ptr(key_password).to_str()?.to_owned() })
         };
 
+        let fingerprint = if fingerprint.is_null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(fingerprint).to_str()?.to_owned() })
+        };
+
         let setup = BackupSetup {
             host: repo.host().to_owned(),
             user: repo.user().to_owned(),
@@ -101,6 +160,7 @@ pub extern "C" fn proxmox_backup_new(
             backup_time,
             keyfile,
             key_password,
+            fingerprint,
         };
 
         BackupTask::new(setup)
@@ -115,6 +175,40 @@ pub extern "C" fn proxmox_backup_new(
     }
 }
 
+/// Open connection to the backup server (sync)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_connect(
+    handle: *mut ProxmoxBackupHandle,
+    error: *mut *mut c_char,
+) -> c_int {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    let mut result: c_int = -1;
+
+    let mut got_result_condition = GotResultCondition::new();
+
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+
+    let msg = BackupMessage::Connect { callback_info};
+
+    if let Err(_) = task.command_tx.send(msg) {
+        let errmsg = CString::new("task already aborted (send command failed)".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    got_result_condition.wait();
+
+    return result;
+}
+
 /// Open connection to the backup server
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -126,17 +220,14 @@ pub extern "C" fn proxmox_backup_connect_async(
     error: *mut *mut c_char,
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
-        let errmsg = CString::new("task already aborted".to_string()).unwrap();
-        unsafe { *result = -1; *error =  errmsg.into_raw(); }
-        callback(callback_data);
+        callback_info.send_result(Err(format_err!("task already aborted")));
         return;
     }
 
-    let msg = BackupMessage::Connect {
-        callback_info: CallbackPointers { callback, callback_data, error, result },
-    };
+    let msg = BackupMessage::Connect { callback_info };
 
     println!("connect_async start");
     let _res = task.command_tx.send(msg); // fixme: log errors
@@ -161,6 +252,44 @@ pub extern "C" fn proxmox_backup_abort(
 
     println!("send abort");
     let _res = task.command_tx.send(BackupMessage::Abort);
+}
+
+/// Register a backup image (sync)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_register_image(
+    handle: *mut ProxmoxBackupHandle,
+    device_name: *const c_char, // expect utf8 here
+    size: u64,
+    error: * mut * mut c_char,
+) -> c_int {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    let mut result: c_int = -1;
+
+    let mut got_result_condition = GotResultCondition::new();
+
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+
+    let device_name = unsafe { CStr::from_ptr(device_name).to_string_lossy().to_string() };
+
+    let msg = BackupMessage::RegisterImage { device_name, size, callback_info };
+
+    if let Err(_) = task.command_tx.send(msg) {
+        let errmsg = CString::new("task already aborted (send command failed)".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    got_result_condition.wait();
+
+    return result;
 }
 
 /// Register a backup image
@@ -196,6 +325,50 @@ pub extern "C" fn proxmox_backup_register_image_async(
     println!("register_image_async start");
     let _res = task.command_tx.send(msg); // fixme: log errors
     println!("register_image_async send end");
+}
+
+/// Add a configuration blob to the backup (sync)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_add_config(
+    handle: *mut ProxmoxBackupHandle,
+    name: *const c_char, // expect utf8 here
+    data: *const u8,
+    size: u64,
+    error: * mut * mut c_char,
+) -> c_int {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    let mut result: c_int = -1;
+
+    let mut got_result_condition = GotResultCondition::new();
+
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+
+    let name = unsafe { CStr::from_ptr(name).to_string_lossy().to_string() };
+
+    let msg = BackupMessage::AddConfig {
+        name,
+        data: DataPointer(data),
+        size,
+        callback_info,
+    };
+
+    if let Err(_) = task.command_tx.send(msg) {
+        let errmsg = CString::new("task already aborted (send command failed)".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    got_result_condition.wait();
+
+    return result;
 }
 
 /// Add a configuration blob to the backup
@@ -235,6 +408,50 @@ pub extern "C" fn proxmox_backup_add_config_async(
     println!("add config send end");
 }
 
+/// Write data to into a registered image (sync)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_write_data(
+    handle: *mut ProxmoxBackupHandle,
+    dev_id: u8,
+    data: *const u8,
+    offset: u64,
+    size: u64,
+    error: * mut * mut c_char,
+) -> c_int {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    let mut result: c_int = -1;
+
+    let mut got_result_condition = GotResultCondition::new();
+
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+
+    let msg = BackupMessage::WriteData {
+        dev_id,
+        data: DataPointer(data),
+        offset,
+        size,
+        callback_info,
+    };
+
+    if let Err(_) = task.command_tx.send(msg) {
+        let errmsg = CString::new("task already aborted (send command failed)".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    got_result_condition.wait();
+
+    return result;
+}
+
 /// Write data to into a registered image
 ///
 /// Upload a chunk of data for the <dev_id> image.
@@ -272,6 +489,41 @@ pub extern "C" fn proxmox_backup_write_data_async(
     println!("write_data_async end");
 }
 
+/// Close a registered image (sync)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_close_image(
+    handle: *mut ProxmoxBackupHandle,
+    dev_id: u8,
+    error: * mut * mut c_char,
+) -> c_int {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    let mut result: c_int = -1;
+
+    let mut got_result_condition = GotResultCondition::new();
+
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+
+    let msg = BackupMessage::CloseImage { dev_id, callback_info };
+
+    if let Err(_) = task.command_tx.send(msg) {
+        let errmsg = CString::new("task already aborted (send command failed)".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    got_result_condition.wait();
+
+    return result;
+}
+
 /// Close a registered image
 ///
 /// Mark the image as closed. Further writes are not possible.
@@ -298,6 +550,40 @@ pub extern "C" fn proxmox_backup_close_image_async(
     println!("close_image_async start");
     let _res = task.command_tx.send(msg); // fixme: log errors
     println!("close_image_async end");
+}
+
+/// Finish the backup (sync)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_finish(
+    handle: *mut ProxmoxBackupHandle,
+    error: * mut * mut c_char,
+) -> c_int {
+    let task = unsafe { &mut *(handle as * mut BackupTask) };
+
+    if let Some(_reason) = &task.aborted {
+        let errmsg = CString::new("task already aborted".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    let mut result: c_int = -1;
+
+    let mut got_result_condition = GotResultCondition::new();
+
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+
+    let msg = BackupMessage::Finish { callback_info };
+
+    if let Err(_) = task.command_tx.send(msg) {
+        let errmsg = CString::new("task already aborted (send command failed)".to_string()).unwrap();
+        unsafe { *error =  errmsg.into_raw(); }
+        return -1;
+    }
+
+    got_result_condition.wait();
+
+    return result;
 }
 
 /// Finish the backup

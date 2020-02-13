@@ -1,17 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
 #include "proxmox-backup-qemu.h"
-
-void test_cb(void *data) {
-  printf("callback called\n");
-}
 
 void main(int argc, char **argv) {
 
   if (argc != 2) {
-    fprintf(stderr, "usage: simpletest <repository>\n");
+    fprintf(stderr, "usage: simpletest <repository>\n\n");
+    fprintf(stderr, "uses environment vars: PBS_PASSWORD and PBS_FINGERPRINT\n");
     exit(-1);
   }
 
@@ -22,8 +20,12 @@ void main(int argc, char **argv) {
 
   char *pbs_error = NULL;
 
+  char *password = getenv("PBS_PASSWORD");
+
+  char *fingerprint = getenv("PBS_FINGERPRINT");
+
   ProxmoxBackupHandle *pbs = proxmox_backup_new
-    (repository, backup_id, backup_time, NULL, NULL, NULL, &pbs_error);
+    (repository, backup_id, backup_time, password, NULL, NULL, fingerprint, &pbs_error);
 
   if (pbs == NULL) {
     fprintf(stderr, "proxmox_backup_new failed - %s\n", pbs_error);
@@ -31,19 +33,56 @@ void main(int argc, char **argv) {
     exit(-1);
   }
 
-  int dev_id = proxmox_backup_register_image(pbs, "scsi-drive0", 1024*1024*64, &pbs_error);
+  printf("connect\n");
+  if (proxmox_backup_connect(pbs, &pbs_error) != 0) {
+    fprintf(stderr, "proxmox_backup_connect failed - %s\n", pbs_error);
+    proxmox_backup_free_error(pbs_error);
+    exit(-1);
+  }
+
+  printf("add config\n");
+  char *config_data = "key1: value1\nkey2: value2\n";
+  if (proxmox_backup_add_config(pbs, "test.conf", config_data, strlen(config_data), &pbs_error) != 0) {
+    fprintf(stderr, "proxmox_backup_connect failed - %s\n", pbs_error);
+    proxmox_backup_free_error(pbs_error);
+    exit(-1);
+  }
+
+
+  int img_chunks = 16;
+  int chunk_size = 1024*1024*4;
+
+  // fixme: chunk size ??
+  printf("register_image\n");
+  int dev_id = proxmox_backup_register_image(pbs, "scsi-drive0", chunk_size*img_chunks, &pbs_error);
   if (dev_id < 0) {
     fprintf(stderr, "proxmox_backup_register_image failed - %s\n", pbs_error);
     proxmox_backup_free_error(pbs_error);
     exit(-1);
   }
 
-  printf("write a single chunk\n");
-  proxmox_backup_write_data_async(pbs, dev_id, NULL, 0, 4*1024*1024, test_cb, NULL, &pbs_error);
+  for (int i = 0; i < img_chunks; i++) {
+    printf("write a single chunk %d\n", i);
+    proxmox_backup_write_data(pbs, dev_id, NULL, i*chunk_size, chunk_size, &pbs_error);
+  }
+
+  printf("close_image\n");
+  if (proxmox_backup_close_image(pbs, dev_id, &pbs_error) < 0) {
+    fprintf(stderr, "proxmox_backup_close_image failed - %s\n", pbs_error);
+    proxmox_backup_free_error(pbs_error);
+    exit(-1);
+  }
+
+  printf("finish backup\n");
+  if (proxmox_backup_finish(pbs, &pbs_error) < 0) {
+    fprintf(stderr, "proxmox_backup_finish failed - %s\n", pbs_error);
+    proxmox_backup_free_error(pbs_error);
+    exit(-1);
+  }
 
   // simply abort now
 
-  printf("Join\n");
+  printf("join\n");
   proxmox_backup_disconnect(pbs);
 
   printf("Done\n");

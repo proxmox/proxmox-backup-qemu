@@ -25,12 +25,14 @@ pub(crate) struct BackupSetup {
     pub password: Option<String>,
     pub keyfile: Option<std::path::PathBuf>,
     pub key_password: Option<String>,
+    pub fingerprint: Option<String>,
 }
 
 impl BackupSetup {
 
     pub(crate) async fn connect(&self) -> Result<Arc<BackupWriter>, Error> {
         let options = HttpClientOptions::new()
+            .fingerprint(self.fingerprint.clone())
             .password(self.password.clone());
 
         let client = HttpClient::new(&self.host, &self.user, options)?;
