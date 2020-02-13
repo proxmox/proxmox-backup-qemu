@@ -78,8 +78,6 @@ void main(int argc, char **argv) {
     exit(-1);
   }
 
-  // simply abort now
-
   printf("join\n");
   proxmox_backup_disconnect(pbs);
 
