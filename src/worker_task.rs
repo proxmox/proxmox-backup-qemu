@@ -87,7 +87,8 @@ fn backup_worker_task(
 ) -> Result<BackupTaskStats, Error>  {
 
     let mut builder = tokio::runtime::Builder::new();
-
+    builder.threaded_scheduler();
+    builder.enable_all();
     builder.max_threads(6);
     builder.core_threads(4);
     builder.thread_name("proxmox-backup-qemu-worker");
