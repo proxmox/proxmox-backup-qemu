@@ -46,9 +46,9 @@ impl BackupTask {
 
         let (command_tx, command_rx) = channel();
 
-        let worker = std::thread::spawn(move ||  {
+        let worker = std::thread::Builder::new().name(String::from("proxmox-backup-qemu-main-worker")).spawn(move ||  {
             backup_worker_task(setup, crypt_config, connect_tx, command_rx)
-        });
+        })?;
 
         connect_rx.recv()??; // sync
 
