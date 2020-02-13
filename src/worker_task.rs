@@ -92,7 +92,7 @@ fn backup_worker_task(
     builder.core_threads(4);
     builder.thread_name("proxmox-backup-qemu-worker");
 
-    let runtime = match builder.build() {
+    let mut runtime = match builder.build() {
         Ok(runtime) => runtime,
         Err(err) =>  {
             connect_tx.send(Err(format_err!("create runtime failed: {}", err)))?;
@@ -122,7 +122,7 @@ fn backup_worker_task(
 
     let client = Arc::new(Mutex::new(None));
 
-    runtime.spawn(async move  {
+    runtime.block_on(async move  {
 
         let registry = Arc::new(Mutex::new(ImageRegistry::new()));
 
@@ -260,9 +260,6 @@ fn backup_worker_task(
         println!("worker end loop");
     });
 
-    //runtime.shutdown_on_idle();
-
-    // fixme: stats is always 0 here
     let stats = BackupTaskStats { written_bytes: written_bytes.fetch_add(0, Ordering::SeqCst)  };
     Ok(stats)
 }
