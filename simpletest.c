@@ -61,7 +61,11 @@ void main(int argc, char **argv) {
 
   for (int i = 0; i < img_chunks; i++) {
     printf("write a single chunk %d\n", i);
-    proxmox_backup_write_data(pbs, dev_id, NULL, i*PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, &pbs_error);
+    if (proxmox_backup_write_data(pbs, dev_id, NULL, i*PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, &pbs_error) < 0) {
+      fprintf(stderr, "proxmox_backup_write_data failed - %s\n", pbs_error);
+      proxmox_backup_free_error(pbs_error);
+      exit(-1);
+    }
   }
 
   printf("close_image\n");
