@@ -6,7 +6,7 @@ use std::sync::{Mutex, Condvar};
 
 use proxmox::try_block;
 use proxmox_backup::client::BackupRepository;
-
+use proxmox_backup::backup::BackupDir;
 use chrono::{DateTime, Utc, TimeZone};
 
 mod capi_types;
@@ -677,8 +677,7 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_connect(
     repo: *const c_char,
-    backup_id: *const c_char,
-    backup_time: u64,
+    snapshot: *const c_char,
     password: *const c_char,
     keyfile: *const c_char,
     key_password: *const c_char,
@@ -689,9 +688,17 @@ pub extern "C" fn proxmox_restore_connect(
     let result: Result<_, Error> = try_block!({
         let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
         let repo: BackupRepository = repo.parse()?;
-        let backup_id = unsafe { CStr::from_ptr(backup_id).to_str()?.to_owned() };
 
-        let backup_time = Utc.timestamp(backup_time as i64, 0);
+        let snapshot = unsafe { CStr::from_ptr(snapshot).to_string_lossy().into_owned() };
+        let snapshot = BackupDir::parse(&snapshot)?;
+
+        let backup_type = snapshot.group().backup_type();
+        let backup_id = snapshot.group().backup_id().to_owned();
+        let backup_time = snapshot.backup_time();
+
+        if backup_type != "vm" {
+            bail!("wrong backup type ({} != vm)", backup_type);
+        }
 
         let password = if password.is_null() {
             None
