@@ -40,7 +40,9 @@ impl ProxmoxRestore {
 
         let result: Result<_, Error> = block_on(async {
 
-            let options = HttpClientOptions::new();
+            let options = HttpClientOptions::new()
+                .fingerprint(setup.fingerprint.clone())
+                .password(setup.password.clone());
 
             let client = HttpClient::new(&host, &user, options)?;
             let client = BackupReader::start(
