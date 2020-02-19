@@ -10,7 +10,9 @@ use futures::future::{Future, Either, FutureExt};
 
 use proxmox_backup::tools::BroadcastFuture;
 use proxmox_backup::backup::{CryptConfig, load_and_decrypt_key};
+use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupWriter};
 
+use super::BackupSetup;
 use crate::capi_types::*;
 use crate::commands::*;
 
@@ -141,11 +143,17 @@ fn backup_worker_task(
 
             match msg {
                 BackupMessage::Connect { callback_info } => {
-                    let client = client.clone();
                     let setup = setup.clone();
+                    let client = client.clone();
 
                     let command_future = async move {
-                        let writer = setup.connect().await?;
+                        let options = HttpClientOptions::new()
+                            .fingerprint(setup.fingerprint.clone())
+                            .password(setup.password.clone());
+
+                        let http = HttpClient::new(&setup.host, &setup.user, options)?;
+                        let writer = BackupWriter::start(http, &setup.store, "vm", &setup.backup_id, setup.backup_time, false).await?;
+
                         let mut guard = client.lock().unwrap();
                         *guard = Some(writer);
                         Ok(0)

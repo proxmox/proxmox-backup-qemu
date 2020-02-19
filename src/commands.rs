@@ -9,36 +9,9 @@ use serde_json::{json, Value};
 use proxmox_backup::backup::*;
 use proxmox_backup::client::*;
 
-use chrono::{Utc, DateTime};
-
+use super::BackupSetup;
 use crate::capi_types::*;
 use crate::upload_queue::*;
-
-#[derive(Clone)]
-pub(crate) struct BackupSetup {
-    pub host: String,
-    pub store: String,
-    pub user: String,
-    pub chunk_size: u64,
-    pub backup_id: String,
-    pub backup_time: DateTime<Utc>,
-    pub password: Option<String>,
-    pub keyfile: Option<std::path::PathBuf>,
-    pub key_password: Option<String>,
-    pub fingerprint: Option<String>,
-}
-
-impl BackupSetup {
-
-    pub(crate) async fn connect(&self) -> Result<Arc<BackupWriter>, Error> {
-        let options = HttpClientOptions::new()
-            .fingerprint(self.fingerprint.clone())
-            .password(self.password.clone());
-
-        let client = HttpClient::new(&self.host, &self.user, options)?;
-        BackupWriter::start(client, &self.store, "vm", &self.backup_id, self.backup_time, false).await
-    }
-}
 
 struct ImageUploadInfo {
     wid: u64,

@@ -5,10 +5,9 @@ use std::os::raw::{c_uchar, c_char, c_int, c_void};
 use std::sync::{Mutex, Condvar};
 
 use proxmox::try_block;
-use proxmox_backup::backup::*;
 use proxmox_backup::client::BackupRepository;
 
-use chrono::{Utc, TimeZone};
+use chrono::{DateTime, Utc, TimeZone};
 
 mod capi_types;
 use capi_types::*;
@@ -16,7 +15,6 @@ use capi_types::*;
 mod upload_queue;
 
 mod commands;
-use commands::*;
 
 mod worker_task;
 use worker_task::*;
@@ -53,6 +51,20 @@ macro_rules! raise_error_int {
         unsafe { *$error =  errmsg.into_raw(); }
         return -1 as c_int;
     }}
+}
+
+#[derive(Clone)]
+pub(crate) struct BackupSetup {
+    pub host: String,
+    pub store: String,
+    pub user: String,
+    pub chunk_size: u64,
+    pub backup_id: String,
+    pub backup_time: DateTime<Utc>,
+    pub password: Option<String>,
+    pub keyfile: Option<std::path::PathBuf>,
+    pub key_password: Option<String>,
+    pub fingerprint: Option<String>,
 }
 
 // helper class to implement synchrounous interface
@@ -665,14 +677,27 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_connect(
     repo: *const c_char,
-    snapshot: *const c_char,
+    backup_id: *const c_char,
+    backup_time: u64,
+    password: *const c_char,
     keyfile: *const c_char,
+    key_password: *const c_char,
+    fingerprint: *const c_char,
     error: * mut * mut c_char,
 ) -> *mut ProxmoxRestoreHandle {
 
     let result: Result<_, Error> = try_block!({
         let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
         let repo: BackupRepository = repo.parse()?;
+        let backup_id = unsafe { CStr::from_ptr(backup_id).to_str()?.to_owned() };
+
+        let backup_time = Utc.timestamp(backup_time as i64, 0);
+
+        let password = if password.is_null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(password).to_str()?.to_owned() })
+        };
 
         let keyfile = if keyfile.is_null() {
             None
@@ -680,10 +705,32 @@ pub extern "C" fn proxmox_restore_connect(
             Some(unsafe { CStr::from_ptr(keyfile).to_str().map(std::path::PathBuf::from)? })
         };
 
-        let snapshot = unsafe { CStr::from_ptr(snapshot).to_string_lossy().into_owned() };
-        let snapshot = BackupDir::parse(&snapshot)?;
+        let key_password = if key_password.is_null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(key_password).to_str()?.to_owned() })
+        };
 
-        ProxmoxRestore::new(repo, snapshot, keyfile)
+        let fingerprint = if fingerprint.is_null() {
+            None
+        } else {
+            Some(unsafe { CStr::from_ptr(fingerprint).to_str()?.to_owned() })
+        };
+
+        let setup = BackupSetup {
+            host: repo.host().to_owned(),
+            user: repo.user().to_owned(),
+            store: repo.store().to_owned(),
+            chunk_size: PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, // not used by restore
+            backup_id,
+            password,
+            backup_time,
+            keyfile,
+            key_password,
+            fingerprint,
+        };
+
+        ProxmoxRestore::new(setup)
     });
 
     match result {

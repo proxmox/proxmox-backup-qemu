@@ -4,7 +4,9 @@ use std::os::unix::fs::OpenOptionsExt;
 
 use proxmox_backup::tools::runtime::block_on;
 use proxmox_backup::backup::*;
-use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, BackupRepository, RemoteChunkReader};
+use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
+
+use super::BackupSetup;
 
 pub(crate) struct ProxmoxRestore {
     pub client: Arc<BackupReader>,
@@ -14,30 +16,27 @@ pub(crate) struct ProxmoxRestore {
 
 impl ProxmoxRestore {
 
-    pub fn new(
-        repo: BackupRepository,
-        snapshot: BackupDir,
-        keyfile: Option<std::path::PathBuf>,
-    ) -> Result<Self, Error> {
+    pub fn new(setup: BackupSetup) -> Result<Self, Error> {
 
-        let host = repo.host().to_owned();
-        let user = repo.user().to_owned();
-        let store = repo.store().to_owned();
-        let backup_type = snapshot.group().backup_type();
-        let backup_id = snapshot.group().backup_id().to_owned();
-        let backup_time = snapshot.backup_time();
-
-        if backup_type != "vm" {
-            bail!("wrong backup type ({} != vm)", backup_type);
-        }
-
-        let crypt_config = match keyfile {
+        let crypt_config = match setup.keyfile {
             None => None,
-            Some(path) => {
-                let (key, _) = load_and_decrypt_key(&path, &get_encryption_key_password)?;
+            Some(ref path) => {
+                let (key, _) = load_and_decrypt_key(path, & || {
+                    match setup.key_password {
+                        Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
+                        None => bail!("no key_password specified"),
+                    }
+                })?;
                 Some(Arc::new(CryptConfig::new(key)?))
             }
         };
+
+        let host = setup.host;
+        let user = setup.user;
+        let store = setup.store;
+        let backup_type = String::from("vm");
+        let backup_id = setup.backup_id;
+        let backup_time = setup.backup_time;
 
         let result: Result<_, Error> = block_on(async {
 
@@ -172,17 +171,5 @@ impl ProxmoxRestore {
         );
 
         Ok(())
-    }
-}
-
-// helper to get encrtyption key password
-fn get_encryption_key_password() -> Result<Vec<u8>, Error> {
-    use std::env::VarError::*;
-    match std::env::var("PBS_ENCRYPTION_PASSWORD") {
-        Ok(p) => Ok(p.as_bytes().to_vec()),
-        Err(NotUnicode(_)) => bail!("PBS_ENCRYPTION_PASSWORD contains bad characters"),
-        Err(NotPresent) => {
-            bail!("env PBS_ENCRYPTION_PASSWORD not set");
-        }
     }
 }
