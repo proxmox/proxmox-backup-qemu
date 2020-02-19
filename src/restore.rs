@@ -31,27 +31,20 @@ impl ProxmoxRestore {
             }
         };
 
-        let host = setup.host;
-        let user = setup.user;
-        let store = setup.store;
-        let backup_type = String::from("vm");
-        let backup_id = setup.backup_id;
-        let backup_time = setup.backup_time;
-
         let result: Result<_, Error> = block_on(async {
 
             let options = HttpClientOptions::new()
                 .fingerprint(setup.fingerprint.clone())
                 .password(setup.password.clone());
 
-            let client = HttpClient::new(&host, &user, options)?;
+            let client = HttpClient::new(&setup.host, &setup.user, options)?;
             let client = BackupReader::start(
                 client,
                 crypt_config.clone(),
-                &store,
-                &backup_type,
-                &backup_id,
-                backup_time,
+                &setup.store,
+                "vm",
+                &setup.backup_id,
+                setup.backup_time,
                 true
             ).await?;
 
