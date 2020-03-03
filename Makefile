@@ -1,11 +1,11 @@
+include /usr/share/dpkg/default.mk
+
 PACKAGE=libproxmox-backup-qemu0
-PKGVER=0.1
-PKGREL=1
 
 ARCH:=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
 GITVERSION:=$(shell git rev-parse HEAD)
 
-DEBS=${PACKAGE}_${PKGVER}-${PKGREL}_${ARCH}.deb ${PACKAGE}-dev_${PKGVER}-${PKGREL}_${ARCH}.deb
+DEBS=${PACKAGE}_${DEB_VERSION}_${ARCH}.deb ${PACKAGE}-dev_${DEB_VERSION}_${ARCH}.deb
 
 DESTDIR=
 
