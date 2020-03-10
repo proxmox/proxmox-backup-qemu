@@ -12,6 +12,7 @@ fn main() {
         .with_language(cbindgen::Language::C)
         .with_crate(&crate_dir)
         .with_header(header)
+        .with_include_guard("PROXMOX_BACKUP_QEMU_H")
         .generate()
         .unwrap()
         .write_to_file("proxmox-backup-qemu.h");
