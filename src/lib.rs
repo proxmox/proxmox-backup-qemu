@@ -246,9 +246,9 @@ pub extern "C" fn proxmox_backup_connect_async(
 
     let msg = BackupMessage::Connect { callback_info };
 
-    println!("connect_async start");
-    let _res = task.command_tx.send(msg); // fixme: log errors
-    println!("connect_async end");
+    if let Err(err) = task.command_tx.send(msg) {
+        eprintln!("proxmox_backup_connect_async send command failed - {}", err);
+    }
 }
 
 /// Abort a running backup task
@@ -267,7 +267,6 @@ pub extern "C" fn proxmox_backup_abort(
     let reason = unsafe { CStr::from_ptr(reason).to_string_lossy().into_owned() };
     task.aborted = Some(reason);
 
-    println!("send abort");
     let _res = task.command_tx.send(BackupMessage::Abort);
 }
 
@@ -339,9 +338,9 @@ pub extern "C" fn proxmox_backup_register_image_async(
 
     let msg = BackupMessage::RegisterImage { device_name, size, callback_info };
 
-    println!("register_image_async start");
-    let _res = task.command_tx.send(msg); // fixme: log errors
-    println!("register_image_async send end");
+    if let Err(err) = task.command_tx.send(msg) {
+        eprintln!("proxmox_backup_register_image_async send command failed - {}", err);
+    }
 }
 
 /// Add a configuration blob to the backup (sync)
@@ -420,9 +419,9 @@ pub extern "C" fn proxmox_backup_add_config_async(
         callback_info,
     };
 
-    println!("add config start");
-    let _res = task.command_tx.send(msg); // fixme: log errors
-    println!("add config send end");
+    if let Err(err) = task.command_tx.send(msg) {
+        eprintln!("proxmox_backup_add_config_async send command failed - {}", err);
+    }
 }
 
 /// Write data to into a registered image (sync)
@@ -501,9 +500,9 @@ pub extern "C" fn proxmox_backup_write_data_async(
         callback_info,
     };
 
-    println!("write_data_async start");
-    let _res = task.command_tx.send(msg); // fixme: log errors
-    println!("write_data_async end");
+    if let Err(err) = task.command_tx.send(msg) {
+        eprintln!("proxmox_backup_write_data_async send command failed - {}", err);
+    }
 }
 
 /// Close a registered image (sync)
@@ -564,9 +563,9 @@ pub extern "C" fn proxmox_backup_close_image_async(
 
     let msg = BackupMessage::CloseImage { dev_id, callback_info };
 
-    println!("close_image_async start");
-    let _res = task.command_tx.send(msg); // fixme: log errors
-    println!("close_image_async end");
+    if let Err(err) = task.command_tx.send(msg) {
+        eprintln!("proxmox_backup_close_image_async send command failed - {}", err);
+    }
 }
 
 /// Finish the backup (sync)
@@ -626,9 +625,9 @@ pub extern "C" fn proxmox_backup_finish_async(
 
     let msg = BackupMessage::Finish { callback_info };
 
-    println!("finish_async start");
-    let _res = task.command_tx.send(msg); // fixme: log errors
-    println!("finish_async end");
+    if let Err(err) = task.command_tx.send(msg) {
+        eprintln!("proxmox_backup_finish_async send command failed - {}", err);
+    }
 }
 
 // fixme: should be async
@@ -639,28 +638,21 @@ pub extern "C" fn proxmox_backup_finish_async(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 
-    println!("diconnect");
-
     let task = handle as * mut BackupTask;
     let task = unsafe { Box::from_raw(task) }; // take ownership
 
-    println!("send end");
-    let _res = task.command_tx.send(BackupMessage::End); // fixme: log errors
+    if let Err(err) = task.command_tx.send(BackupMessage::End) {
+        eprintln!("proxmox_backup_disconnect send command failed - {}", err);
+    }
 
-    println!("try join");
     match task.worker.join() {
         Ok(result) => {
-            match result {
-                Ok(stats) => {
-                    println!("worker finished {:?}", stats);
-                }
-                Err(err) => {
-                    println!("worker finished with error: {:?}", err);
-                }
+            if let Err(err) = result {
+                eprintln!("worker finished with error: {:?}", err);
             }
         }
         Err(err) => {
-           println!("worker paniced with error: {:?}", err);
+            eprintln!("worker paniced with error: {:?}", err);
         }
     }
 

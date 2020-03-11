@@ -162,14 +162,12 @@ fn backup_worker_task(
                     tokio::spawn(handle_async_command(command_future, abort.listen(), callback_info));
                 }
                 BackupMessage::Abort => {
-                    println!("worker got abort mesage");
                     let res = abort_tx.send(()).await;
                     if let Err(_err) = res  {
-                        println!("sending abort failed");
+                        eprintln!("sending abort failed");
                     }
                 }
                 BackupMessage::End => {
-                    println!("worker got end mesage");
                     break;
                 }
                 BackupMessage::AddConfig { name, data, size, callback_info } => {
@@ -265,8 +263,7 @@ fn backup_worker_task(
                 }
             }
         }
-
-        println!("worker end loop");
+        //println!("worker end loop");
     });
 
     let stats = BackupTaskStats { written_bytes: written_bytes.fetch_add(0, Ordering::SeqCst)  };

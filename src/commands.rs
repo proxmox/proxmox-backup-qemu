@@ -88,7 +88,7 @@ pub(crate) async fn add_config(
     data: DataPointer,
     size: u64,
 ) -> Result<c_int, Error> {
-    println!("add config {} size {}", name, size);
+    //println!("add config {} size {}", name, size);
 
     let blob_name = format!("{}.blob", name);
 
@@ -116,12 +116,12 @@ pub(crate) async fn register_image(
     device_size: u64,
     chunk_size: u64,
 ) -> Result<c_int, Error> {
-    println!("register image {} size {}", device_name, device_size);
+    //println!("register image {} size {}", device_name, device_size);
 
     let archive_name = format!("{}.img.fidx", device_name);
 
     client.download_chunk_list("fixed_index", &archive_name, known_chunks.clone()).await?;
-    println!("register image download chunk list OK");
+    //println!("register image download chunk list OK");
 
     let param = json!({ "archive-name": archive_name , "size": device_size});
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
@@ -158,7 +158,7 @@ pub(crate) async fn close_image(
     dev_id: u8,
 ) -> Result<c_int, Error> {
 
-    println!("close image {}", dev_id);
+    //println!("close image {}", dev_id);
 
     let (wid, upload_result, device_name, device_size) = {
         let mut guard = registry.lock().unwrap();
@@ -211,7 +211,7 @@ pub(crate) async fn write_data(
     chunk_size: u64, // expected data size
 ) -> Result<c_int, Error> {
 
-    println!("dev {}: write {} {}", dev_id, offset, size);
+    //println!("dev {}: write {} {}", dev_id, offset, size);
 
     let (wid, mut upload_queue, zero_chunk_digest, device_size) = {
         let mut guard = registry.lock().unwrap();
@@ -324,7 +324,7 @@ pub(crate) async fn write_data(
         }
     }
 
-    println!("upload chunk sucessful");
+    //println!("upload chunk sucessful");
 
     Ok(size as c_int)
 }
@@ -336,7 +336,7 @@ pub(crate) async fn finish_backup(
     setup: BackupSetup,
 ) -> Result<c_int, Error> {
 
-    println!("call finish");
+    //println!("call finish");
 
     let index_data = {
         let guard = registry.lock().unwrap();
@@ -348,7 +348,7 @@ pub(crate) async fn finish_backup(
             "files": &guard.file_list,
         });
 
-        println!("Upload index.json");
+        //println!("Upload index.json");
         serde_json::to_string_pretty(&index)?.into()
     };
 

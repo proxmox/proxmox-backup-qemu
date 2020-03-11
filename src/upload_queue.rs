@@ -91,7 +91,7 @@ async fn upload_handler(
             Ok(ChunkUploadInfo { digest, offset, size, chunk_is_known }) => {
                 let digest_str = proxmox::tools::digest_to_hex(&digest);
 
-                println!("upload_handler {:?} {}", digest, offset);
+                //println!("upload_handler {:?} {}", digest, offset);
                 let pos = (offset/chunk_size) as usize;
                 index[pos] = digest;
 
