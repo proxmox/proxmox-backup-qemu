@@ -225,7 +225,7 @@ pub extern "C" fn proxmox_backup_connect(
     let msg = BackupMessage::Connect { callback_info};
 
     if let Err(_) = task.command_tx.send(msg) {
-        raise_error_int!("task already aborted (send command failed)");
+        raise_error_int!(error, format_err!("task already aborted (send command failed)"));
     }
 
     got_result_condition.wait();
@@ -245,6 +245,7 @@ pub extern "C" fn proxmox_backup_connect_async(
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info2 = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
         callback_info.send_result(Err(format_err!("task already aborted")));
@@ -253,8 +254,8 @@ pub extern "C" fn proxmox_backup_connect_async(
 
     let msg = BackupMessage::Connect { callback_info };
 
-    if let Err(err) = task.command_tx.send(msg) {
-        eprintln!("proxmox_backup_connect_async send command failed - {}", err);
+    if let Err(_) = task.command_tx.send(msg) {
+        callback_info2.send_result(Err(format_err!("task already aborted")));
     }
 }
 
@@ -303,7 +304,7 @@ pub extern "C" fn proxmox_backup_register_image(
     let msg = BackupMessage::RegisterImage { device_name, size, callback_info };
 
     if let Err(_) = task.command_tx.send(msg) {
-        raise_error_int!("task already aborted (send command failed)");
+        raise_error_int!(error, format_err!("task already aborted (send command failed)"));
     }
 
     got_result_condition.wait();
@@ -331,6 +332,7 @@ pub extern "C" fn proxmox_backup_register_image_async(
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info2 = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
         callback_info.send_result(Err(format_err!("task already aborted")));
@@ -341,8 +343,8 @@ pub extern "C" fn proxmox_backup_register_image_async(
 
     let msg = BackupMessage::RegisterImage { device_name, size, callback_info };
 
-    if let Err(err) = task.command_tx.send(msg) {
-        eprintln!("proxmox_backup_register_image_async send command failed - {}", err);
+    if let Err(_) = task.command_tx.send(msg) {
+        callback_info2.send_result(Err(format_err!("task already aborted")));
     }
 }
 
@@ -378,7 +380,7 @@ pub extern "C" fn proxmox_backup_add_config(
     };
 
     if let Err(_) = task.command_tx.send(msg) {
-        raise_error_int!("task already aborted (send command failed)");
+        raise_error_int!(error, format_err!("task already aborted (send command failed)"));
     }
 
     got_result_condition.wait();
@@ -403,6 +405,7 @@ pub extern "C" fn proxmox_backup_add_config_async(
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info2 = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
         callback_info.send_result(Err(format_err!("task already aborted")));
@@ -418,8 +421,8 @@ pub extern "C" fn proxmox_backup_add_config_async(
         callback_info,
     };
 
-    if let Err(err) = task.command_tx.send(msg) {
-        eprintln!("proxmox_backup_add_config_async send command failed - {}", err);
+    if let Err(_) = task.command_tx.send(msg) {
+        callback_info2.send_result(Err(format_err!("task already aborted")));
     }
 }
 
@@ -455,7 +458,7 @@ pub extern "C" fn proxmox_backup_write_data(
     };
 
     if let Err(_) = task.command_tx.send(msg) {
-        raise_error_int!("task already aborted (send command failed)");
+        raise_error_int!(error, format_err!("task already aborted (send command failed)"));
     }
 
     got_result_condition.wait();
@@ -481,6 +484,7 @@ pub extern "C" fn proxmox_backup_write_data_async(
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info2 = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
         callback_info.send_result(Err(format_err!("task already aborted")));
@@ -495,8 +499,8 @@ pub extern "C" fn proxmox_backup_write_data_async(
         callback_info,
     };
 
-    if let Err(err) = task.command_tx.send(msg) {
-        eprintln!("proxmox_backup_write_data_async send command failed - {}", err);
+    if let Err(_) = task.command_tx.send(msg) {
+        callback_info2.send_result(Err(format_err!("task already aborted")));
     }
 }
 
@@ -523,7 +527,7 @@ pub extern "C" fn proxmox_backup_close_image(
     let msg = BackupMessage::CloseImage { dev_id, callback_info };
 
     if let Err(_) = task.command_tx.send(msg) {
-        raise_error_int!("task already aborted (send command failed)");
+        raise_error_int!(error, format_err!("task already aborted (send command failed)"));
     }
 
     got_result_condition.wait();
@@ -546,6 +550,7 @@ pub extern "C" fn proxmox_backup_close_image_async(
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info2 = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
         callback_info.send_result(Err(format_err!("task already aborted")));
@@ -554,8 +559,8 @@ pub extern "C" fn proxmox_backup_close_image_async(
 
     let msg = BackupMessage::CloseImage { dev_id, callback_info };
 
-    if let Err(err) = task.command_tx.send(msg) {
-        eprintln!("proxmox_backup_close_image_async send command failed - {}", err);
+    if let Err(_) = task.command_tx.send(msg) {
+        callback_info2.send_result(Err(format_err!("task already aborted")));
     }
 }
 
@@ -581,7 +586,7 @@ pub extern "C" fn proxmox_backup_finish(
     let msg = BackupMessage::Finish { callback_info };
 
     if let Err(_) = task.command_tx.send(msg) {
-        raise_error_int!("task already aborted (send command failed)");
+        raise_error_int!(error, format_err!("task already aborted (send command failed)"));
     }
 
     got_result_condition.wait();
@@ -604,6 +609,7 @@ pub extern "C" fn proxmox_backup_finish_async(
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info2 = CallbackPointers { callback, callback_data, error, result };
 
     if let Some(_reason) = &task.aborted {
         callback_info.send_result(Err(format_err!("task already aborted")));
@@ -612,8 +618,8 @@ pub extern "C" fn proxmox_backup_finish_async(
 
     let msg = BackupMessage::Finish { callback_info };
 
-    if let Err(err) = task.command_tx.send(msg) {
-        eprintln!("proxmox_backup_finish_async send command failed - {}", err);
+    if let Err(_) = task.command_tx.send(msg) {
+        callback_info2.send_result(Err(format_err!("task already aborted")));
     }
 }
 
