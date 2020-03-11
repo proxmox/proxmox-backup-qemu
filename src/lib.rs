@@ -37,9 +37,20 @@ pub extern "C" fn proxmox_backup_free_error(ptr: * mut c_char) {
     }
 }
 
+// Note: UTF8 Strings may contain 0 bytes.
+fn convert_error_to_cstring(err: String) -> CString {
+    match CString::new(err) {
+        Ok(msg) => msg,
+        Err(err) => {
+            eprintln!("got error containung 0 bytes: {}", err);
+            CString::new("failed to convert error message containing 0 bytes").unwrap()
+        },
+    }
+}
+
 macro_rules! raise_error_null {
     ($error:ident, $err:expr) => {{
-        let errmsg = CString::new($err.to_string()).unwrap(); // fixme
+        let errmsg = convert_error_to_cstring($err.to_string());
         unsafe { *$error =  errmsg.into_raw(); }
         return ptr::null_mut();
     }}
@@ -47,7 +58,7 @@ macro_rules! raise_error_null {
 
 macro_rules! raise_error_int {
     ($error:ident, $err:expr) => {{
-        let errmsg = CString::new($err.to_string()).unwrap(); // fixme
+        let errmsg = convert_error_to_cstring($err.to_string());
         unsafe { *$error =  errmsg.into_raw(); }
         return -1 as c_int;
     }}
