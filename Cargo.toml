@@ -12,13 +12,13 @@ build = "build.rs"
 crate-type = ['lib', 'cdylib', 'staticlib']
 
 [build-dependencies]
-cbindgen = "0.13.1"
+cbindgen = "0.14.2"
 
 [dependencies]
 libc = "0.2"
 bytes = "0.5"
-proxmox = { version = "0.1.18", features = [ "sortable-macro", "api-macro" ] }
-proxmox-backup = { git = "ssh://gitolite3@proxdev.maurer-it.com/rust/proxmox-backup", tag = "v0.1.3" }
+proxmox = { version = "0.1.38", features = [ "sortable-macro", "api-macro" ] }
+proxmox-backup = { git = "git://git.proxmox.com/git/proxmox-backup.git", tag = "v0.2.1" }
 #proxmox-backup = { path = "../proxmox-backup" }
 chrono = "0.4" # Date and time library for Rust
 anyhow = "1.0"
