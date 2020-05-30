@@ -1,4 +1,4 @@
-use failure::*;
+use anyhow::{bail, format_err, Error};
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
 use std::os::raw::c_int;

@@ -1,4 +1,4 @@
-use failure::*;
+use anyhow::{bail, format_err, Error};
 use std::collections::HashSet;
 use std::thread::JoinHandle;
 use std::sync::{Mutex, Arc};

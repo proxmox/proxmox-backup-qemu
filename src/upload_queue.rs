@@ -1,4 +1,4 @@
-use failure::*;
+use anyhow::Error;
 use std::collections::HashSet;
 use std::sync::{Mutex, Arc};
 

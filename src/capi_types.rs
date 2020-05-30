@@ -1,4 +1,4 @@
-use failure::*;
+use anyhow::Error;
 use std::os::raw::{c_char, c_void, c_int};
 use std::ffi::CString;
 
