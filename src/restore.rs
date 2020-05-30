@@ -1,4 +1,4 @@
-use anyhow::{bail, format_err, Error};
+use anyhow::{bail, Error};
 use std::sync::Arc;
 use std::os::unix::fs::OpenOptionsExt;
 
@@ -92,20 +92,10 @@ impl ProxmoxRestore {
         verbose: bool,
     ) -> Result<(), Error> {
 
-        let tmpfile = std::fs::OpenOptions::new()
-            .write(true)
-            .read(true)
-            .custom_flags(libc::O_TMPFILE)
-            .open("/tmp")?;
-
-        let tmpfile = self.client.download(&archive_name, tmpfile).await?;
-
-        let index = FixedIndexReader::new(tmpfile)
-            .map_err(|err| format_err!("unable to read fixed index '{}' - {}", archive_name, err))?;
-
-        // Note: do not use values stored in index (not trusted) - instead, computed them again
-        let (csum, size) = index.compute_csum();
-        self.manifest.verify_file(&archive_name, &csum, size)?;
+        if verbose {
+            eprintln!("download and verify backup index");
+        }
+        let index = self.client.download_fixed_index(&self.manifest, &archive_name).await?;
 
         let (_, zero_chunk_digest) = DataChunkBuilder::build_zero_chunk(
             self.crypt_config.as_ref().map(Arc::as_ref),
