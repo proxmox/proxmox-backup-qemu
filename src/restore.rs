@@ -1,13 +1,14 @@
 use anyhow::{bail, Error};
 use std::sync::Arc;
 
-use proxmox_backup::tools::runtime::block_on;
+use proxmox_backup::tools::runtime::{get_runtime, block_on};
 use proxmox_backup::backup::*;
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
 
 use super::BackupSetup;
 
 pub(crate) struct ProxmoxRestore {
+    _runtime: Arc<tokio::runtime::Runtime>,
     pub client: Arc<BackupReader>,
     pub crypt_config: Option<Arc<CryptConfig>>,
     pub manifest: BackupManifest,
@@ -16,6 +17,10 @@ pub(crate) struct ProxmoxRestore {
 impl ProxmoxRestore {
 
     pub fn new(setup: BackupSetup) -> Result<Self, Error> {
+
+        // keep a reference to the runtime - else the runtime can be dropped
+        // and further connections fails.
+        let _runtime = get_runtime();
 
         let crypt_config = match setup.keyfile {
             None => None,
@@ -55,6 +60,7 @@ impl ProxmoxRestore {
         let (client, manifest) = result?;
 
         Ok(Self {
+            _runtime,
             manifest,
             client,
             crypt_config,
