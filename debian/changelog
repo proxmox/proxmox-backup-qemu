@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.1.5-1) unstable; urgency=medium
+
+  * restore.rs: hold reference to the runtime
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 02 Jun 2020 12:18:20 +0200
+
 proxmox-backup-qemu (0.1.4-1) unstable; urgency=medium
 
   * rebuild with updated crates
