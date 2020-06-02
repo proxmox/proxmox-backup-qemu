@@ -1,6 +1,5 @@
 use anyhow::{bail, Error};
 use std::sync::Arc;
-use std::os::unix::fs::OpenOptionsExt;
 
 use proxmox_backup::tools::runtime::block_on;
 use proxmox_backup::backup::*;
