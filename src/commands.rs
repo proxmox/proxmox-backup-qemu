@@ -213,29 +213,13 @@ pub(crate) async fn write_data(
 
     //println!("dev {}: write {} {}", dev_id, offset, size);
 
-    let (wid, mut upload_queue, zero_chunk_digest, device_size) = {
+    let (wid, mut upload_queue, zero_chunk_digest) = {
         let mut guard = registry.lock().unwrap();
         let info = guard.lookup(dev_id)?;
 
 
-        (info.wid, info.upload_queue.clone(), info.zero_chunk_digest, info.device_size)
+        (info.wid, info.upload_queue.clone(), info.zero_chunk_digest)
     };
-
-    // Note: last chunk may be smaller than chunk_size
-    if size > chunk_size {
-        bail!("write_data: got unexpected chunk size {}", size);
-    }
-
-    if offset & (chunk_size - 1) != 0 {
-        bail!("write_data: offset {} is not correctly aligned", offset);
-    }
-
-    let end_offset = offset + chunk_size;
-    if end_offset > device_size {
-        bail!("write_data: write out of range");
-    } else if end_offset < device_size && size != chunk_size {
-        bail!("write_data: chunk too small {}", size);
-    }
 
     let upload_future: Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin> = {
         if data.0.is_null() {
