@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.1.6-1) unstable; urgency=medium
+
+  * fix backing up images that are not multiples of 'chunk_size'
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 04 Jun 2020 10:48:44 +0200
+
 proxmox-backup-qemu (0.1.5-1) unstable; urgency=medium
 
   * restore.rs: hold reference to the runtime
