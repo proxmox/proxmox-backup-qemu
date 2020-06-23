@@ -675,7 +675,7 @@ pub extern "C" fn proxmox_restore_connect(
         let repo: BackupRepository = repo.parse()?;
 
         let snapshot = unsafe { CStr::from_ptr(snapshot).to_string_lossy().into_owned() };
-        let snapshot = BackupDir::parse(&snapshot)?;
+        let snapshot: BackupDir = snapshot.parse()?;
 
         let backup_type = snapshot.group().backup_type();
         let backup_id = snapshot.group().backup_id().to_owned();

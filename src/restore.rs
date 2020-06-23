@@ -133,7 +133,7 @@ impl ProxmoxRestore {
                 bytes += index.chunk_size;
                 zeroes += index.chunk_size;
             } else {
-                let raw_data = chunk_reader.read_chunk(&digest)?;
+                let raw_data = ReadChunk::read_chunk(&mut chunk_reader, &digest)?;
                 let res = write_data_callback(offset, &raw_data);
                 if res < 0 {
                     bail!("write_data_callback failed ({})", res);
