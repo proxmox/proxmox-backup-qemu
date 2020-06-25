@@ -17,8 +17,8 @@ cbindgen = "0.14.2"
 [dependencies]
 libc = "0.2"
 bytes = "0.5"
-proxmox = { version = "0.1.38", features = [ "sortable-macro", "api-macro" ] }
-proxmox-backup = { git = "git://git.proxmox.com/git/proxmox-backup.git", tag = "v0.3.0" }
+proxmox = { version = "0.1.41", features = [ "sortable-macro", "api-macro" ] }
+proxmox-backup = { git = "git://git.proxmox.com/git/proxmox-backup.git", tag = "v0.4.0" }
 #proxmox-backup = { path = "../proxmox-backup" }
 chrono = "0.4" # Date and time library for Rust
 anyhow = "1.0"
@@ -27,4 +27,5 @@ serde_json = "1.0"
 tokio = { version = "0.2.9", features = [ "blocking", "fs", "io-util", "macros", "rt-threaded", "signal", "stream", "tcp", "time", "uds" ] }
 openssl = "0.10"
 h2 = { version = "0.2", features = ["stream"] }
+lazy_static = "1.4"
 

@@ -5,6 +5,7 @@ use std::sync::{Mutex, Arc};
 use futures::future::Future;
 use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
+use proxmox_backup::backup::*;
 use proxmox_backup::client::*;
 
 pub(crate) struct ChunkUploadInfo {
@@ -28,6 +29,7 @@ type UploadResultSender = oneshot::Sender<Result<UploadResult, Error>>;
 pub(crate) fn create_upload_queue(
     client: Arc<BackupWriter>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    initial_index: Arc<Option<FixedIndexReader>>,
     wid: u64,
     device_size: u64,
     chunk_size: u64,
@@ -39,6 +41,7 @@ pub(crate) fn create_upload_queue(
         upload_handler(
             client,
             known_chunks,
+            initial_index,
             wid,
             device_size,
             chunk_size,
@@ -70,6 +73,7 @@ async fn upload_chunk_list(
 async fn upload_handler(
     client: Arc<BackupWriter>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    initial_index: Arc<Option<FixedIndexReader>>,
     wid: u64,
     device_size: u64,
     chunk_size: u64,
@@ -85,6 +89,14 @@ async fn upload_handler(
     let index_size = ((device_size + chunk_size -1)/chunk_size) as usize;
     let mut index = Vec::with_capacity(index_size);
     index.resize(index_size, [0u8; 32]);
+
+    // for incremental, initialize with data from previous backup
+    // caller ensures initial_index length is index_size
+    if let Some(init) = initial_index.as_ref() {
+        for i in 0..index_size {
+            index[i] = *init.index_digest(i).unwrap();
+        }
+    }
 
     while let Some(response_future) = upload_queue.recv().await {
         match response_future.await {

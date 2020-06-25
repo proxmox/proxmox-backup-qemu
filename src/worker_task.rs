@@ -120,6 +120,7 @@ fn backup_worker_task(
     let written_bytes2 = written_bytes.clone();
 
     let known_chunks = Arc::new(Mutex::new(HashSet::new()));
+    let manifest = Arc::new(Mutex::new(None));
 
     let chunk_size = setup.chunk_size;
 
@@ -145,6 +146,8 @@ fn backup_worker_task(
                 BackupMessage::Connect { callback_info } => {
                     let setup = setup.clone();
                     let client = client.clone();
+                    let crypt_config = crypt_config.clone();
+                    let manifest = manifest.clone();
 
                     let command_future = async move {
                         let options = HttpClientOptions::new()
@@ -152,10 +155,17 @@ fn backup_worker_task(
                             .password(setup.password.clone());
 
                         let http = HttpClient::new(&setup.host, &setup.user, options)?;
-                        let writer = BackupWriter::start(http, &setup.store, "vm", &setup.backup_id, setup.backup_time, false).await?;
+                        let writer = BackupWriter::start(http, crypt_config.clone(), &setup.store, "vm", &setup.backup_id, setup.backup_time, false).await?;
 
-                        let mut guard = client.lock().unwrap();
-                        *guard = Some(writer);
+                        let last_manifest = writer.download_previous_manifest().await;
+                        let mut manifest_guard = manifest.lock().unwrap();
+                        *manifest_guard = match last_manifest {
+                            Ok(last_manifest) => Some(Arc::new(last_manifest)),
+                            Err(_) => None
+                        };
+
+                        let mut client_guard = client.lock().unwrap();
+                        *client_guard = Some(writer);
                         Ok(0)
                     };
 
@@ -176,7 +186,6 @@ fn backup_worker_task(
                         Some(client) => {
                             let command_future = add_config(
                                 client,
-                                crypt_config.clone(),
                                 registry.clone(),
                                 name,
                                 data,
@@ -189,18 +198,20 @@ fn backup_worker_task(
                         }
                     }
                 }
-                BackupMessage::RegisterImage { device_name, size, callback_info} => {
+                BackupMessage::RegisterImage { device_name, size, incremental, callback_info } => {
                     let client = (*(client.lock().unwrap())).clone();
                     match client {
                         Some(client) => {
                             let command_future = register_image(
                                 client,
                                 crypt_config.clone(),
+                                manifest.clone(),
                                 registry.clone(),
                                 known_chunks.clone(),
                                 device_name,
                                 size,
                                 chunk_size,
+                                incremental,
                             );
                             tokio::spawn(handle_async_command(command_future, abort.listen(), callback_info));
                         }
@@ -250,7 +261,6 @@ fn backup_worker_task(
                         Some(client) => {
                             let command_future = finish_backup(
                                 client,
-                                crypt_config.clone(),
                                 registry.clone(),
                                 setup.clone(),
                             );

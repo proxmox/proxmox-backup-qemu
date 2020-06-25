@@ -285,6 +285,7 @@ pub extern "C" fn proxmox_backup_register_image(
     handle: *mut ProxmoxBackupHandle,
     device_name: *const c_char, // expect utf8 here
     size: u64,
+    is_incremental: i32,
     error: * mut * mut c_char,
 ) -> c_int {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
@@ -301,7 +302,7 @@ pub extern "C" fn proxmox_backup_register_image(
 
     let device_name = unsafe { CStr::from_ptr(device_name).to_string_lossy().to_string() };
 
-    let msg = BackupMessage::RegisterImage { device_name, size, callback_info };
+    let msg = BackupMessage::RegisterImage { device_name, size, callback_info, incremental: is_incremental != 0 };
 
     if let Err(_) = task.command_tx.send(msg) {
         raise_error_int!(error, format_err!("task already aborted (send command failed)"));
@@ -325,6 +326,7 @@ pub extern "C" fn proxmox_backup_register_image_async(
     handle: *mut ProxmoxBackupHandle,
     device_name: *const c_char, // expect utf8 here
     size: u64,
+    is_incremental: i32,
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
     result: *mut c_int,
@@ -341,7 +343,7 @@ pub extern "C" fn proxmox_backup_register_image_async(
 
     let device_name = unsafe { CStr::from_ptr(device_name).to_string_lossy().to_string() };
 
-    let msg = BackupMessage::RegisterImage { device_name, size, callback_info };
+    let msg = BackupMessage::RegisterImage { device_name, size, callback_info, incremental: is_incremental != 0 };
 
     if let Err(_) = task.command_tx.send(msg) {
         callback_info2.send_result(Err(format_err!("task already aborted")));

@@ -1,5 +1,5 @@
 use anyhow::{bail, format_err, Error};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::sync::{Mutex, Arc};
 use std::os::raw::c_int;
 
@@ -12,6 +12,14 @@ use proxmox_backup::client::*;
 use super::BackupSetup;
 use crate::capi_types::*;
 use crate::upload_queue::*;
+
+use lazy_static::lazy_static;
+
+lazy_static!{
+    static ref PREVIOUS_CSUMS: Mutex<HashMap<String, [u8;32]>> = {
+        Mutex::new(HashMap::new())
+    };
+}
 
 struct ImageUploadInfo {
     wid: u64,
@@ -82,7 +90,6 @@ async fn register_zero_chunk(
 
 pub(crate) async fn add_config(
     client: Arc<BackupWriter>,
-    crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
     name: String,
     data: DataPointer,
@@ -95,7 +102,7 @@ pub(crate) async fn add_config(
     let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
     let data = data.to_vec();
 
-    let stats = client.upload_blob_from_data(data, &blob_name, crypt_config, true, false).await?;
+    let stats = client.upload_blob_from_data(data, &blob_name, true, Some(false)).await?;
 
     let mut guard = registry.lock().unwrap();
     guard.file_list.push(json!({
@@ -110,28 +117,75 @@ pub(crate) async fn add_config(
 pub(crate) async fn register_image(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
+    manifest: Arc<Mutex<Option<Arc<BackupManifest>>>>,
     registry: Arc<Mutex<ImageRegistry>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     device_name: String,
     device_size: u64,
     chunk_size: u64,
+    incremental: bool,
 ) -> Result<c_int, Error> {
-    //println!("register image {} size {}", device_name, device_size);
 
     let archive_name = format!("{}.img.fidx", device_name);
 
-    client.download_chunk_list("fixed_index", &archive_name, known_chunks.clone()).await?;
-    //println!("register image download chunk list OK");
+    let manifest = {
+        let guard = manifest.lock().unwrap();
+        match &*guard {
+            Some(manifest) => Some(manifest.clone()),
+            None => None
+        }
+    };
+    let index = match manifest {
+        Some(manifest) => {
+            Some(client.download_previous_fixed_index(&archive_name, &manifest, known_chunks.clone()).await?)
+        },
+        None => None
+    };
 
-    let param = json!({ "archive-name": archive_name , "size": device_size});
+    let mut param = json!({ "archive-name": archive_name , "size": device_size });
+    let mut initial_index = Arc::new(None);
+
+    if incremental {
+        let csum = {
+            let map = PREVIOUS_CSUMS.lock().unwrap();
+            match map.get(&device_name) {
+                Some(c) => Some(*c),
+                None => None
+            }
+        };
+
+        if let Some(csum) = csum {
+            param.as_object_mut().unwrap().insert("reuse-csum".to_owned(), json!(proxmox::tools::digest_to_hex(&csum)));
+
+            match index {
+                Some(index) => {
+                    let index_size = ((device_size + chunk_size -1)/chunk_size) as usize;
+                    if index_size != index.index_count() {
+                        bail!("previous backup has different size than current state, cannot do incremental backup (drive: {})", archive_name);
+                    }
+                    if index.compute_csum().0 != csum {
+                        bail!("previous backup checksum doesn't match session cache, incremental backup would be out of sync (drive: {})", archive_name);
+                    }
+
+                    initial_index = Arc::new(Some(index));
+                },
+                None => bail!("no previous backup found, cannot do incremental backup")
+            }
+
+        } else {
+            bail!("no previous backups in this session, cannot do incremental one");
+        }
+    }
+
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
 
     let zero_chunk_digest =
         register_zero_chunk(client.clone(), crypt_config, chunk_size as usize, wid).await?;
 
-    let (upload_queue,  upload_result) = create_upload_queue(
+    let (upload_queue, upload_result) = create_upload_queue(
         client.clone(),
         known_chunks.clone(),
+        initial_index.clone(),
         wid,
         device_size,
         chunk_size,
@@ -179,20 +233,30 @@ pub(crate) async fn close_image(
         None => bail!("close_image: unknown error because upload result channel was already closed"),
     };
 
+    let csum = proxmox::tools::digest_to_hex(&upload_result.csum);
+
     let param = json!({
         "wid": wid ,
         "chunk-count": upload_result.chunk_count,
         "size": upload_result.bytes_written,
-        "csum": proxmox::tools::digest_to_hex(&upload_result.csum),
+        "csum": csum.clone(),
     });
 
     let _value = client.post("fixed_close", Some(param)).await?;
+
+    {
+        let mut reg_guard = registry.lock().unwrap();
+        let info = reg_guard.lookup(dev_id)?;
+        let mut prev_csum_guard = PREVIOUS_CSUMS.lock().unwrap();
+
+        prev_csum_guard.insert(info.device_name.clone(), proxmox::tools::hex_to_digest(&csum).unwrap());
+    }
 
     let mut guard = registry.lock().unwrap();
     guard.file_list.push(json!({
         "filename": format!("{}.img.fidx", device_name),
         "size": device_size,
-        "csum": proxmox::tools::digest_to_hex(&upload_result.csum),
+        "csum": csum.clone(),
     }));
 
     Ok(0)
@@ -315,7 +379,6 @@ pub(crate) async fn write_data(
 
 pub(crate) async fn finish_backup(
     client: Arc<BackupWriter>,
-    crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<ImageRegistry>>,
     setup: BackupSetup,
 ) -> Result<c_int, Error> {
@@ -337,7 +400,7 @@ pub(crate) async fn finish_backup(
     };
 
     client
-        .upload_blob_from_data(index_data, "index.json.blob", crypt_config, true, true)
+        .upload_blob_from_data(index_data, "index.json.blob", true, Some(true))
         .await?;
 
     client.finish().await?;

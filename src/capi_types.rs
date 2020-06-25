@@ -64,6 +64,7 @@ pub(crate) enum BackupMessage {
     RegisterImage {
         device_name: String,
         size: u64,
+        incremental: bool,
         callback_info: CallbackPointers,
     },
     CloseImage {
