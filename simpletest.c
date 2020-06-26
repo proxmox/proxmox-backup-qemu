@@ -52,7 +52,7 @@ void main(int argc, char **argv) {
   int img_chunks = 16;
 
   printf("register_image\n");
-  int dev_id = proxmox_backup_register_image(pbs, "scsi-drive0", PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE*img_chunks, &pbs_error);
+  int dev_id = proxmox_backup_register_image(pbs, "scsi-drive0", PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE*img_chunks, 0, &pbs_error);
   if (dev_id < 0) {
     fprintf(stderr, "proxmox_backup_register_image failed - %s\n", pbs_error);
     proxmox_backup_free_error(pbs_error);
