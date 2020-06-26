@@ -117,7 +117,7 @@ pub(crate) async fn add_config(
 pub(crate) async fn register_image(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
-    manifest: Arc<Mutex<Option<Arc<BackupManifest>>>>,
+    manifest: Option<Arc<BackupManifest>>,
     registry: Arc<Mutex<ImageRegistry>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     device_name: String,
@@ -128,13 +128,6 @@ pub(crate) async fn register_image(
 
     let archive_name = format!("{}.img.fidx", device_name);
 
-    let manifest = {
-        let guard = manifest.lock().unwrap();
-        match &*guard {
-            Some(manifest) => Some(manifest.clone()),
-            None => None
-        }
-    };
     let index = match manifest {
         Some(manifest) => {
             Some(client.download_previous_fixed_index(&archive_name, &manifest, known_chunks.clone()).await?)
@@ -155,7 +148,7 @@ pub(crate) async fn register_image(
         };
 
         if let Some(csum) = csum {
-            param.as_object_mut().unwrap().insert("reuse-csum".to_owned(), json!(proxmox::tools::digest_to_hex(&csum)));
+            param["reuse-csum"] = proxmox::tools::digest_to_hex(&csum).into();
 
             match index {
                 Some(index) => {

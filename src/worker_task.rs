@@ -200,12 +200,14 @@ fn backup_worker_task(
                 }
                 BackupMessage::RegisterImage { device_name, size, incremental, callback_info } => {
                     let client = (*(client.lock().unwrap())).clone();
+                    let manifest = (*(manifest.lock().unwrap())).clone();
+
                     match client {
                         Some(client) => {
                             let command_future = register_image(
                                 client,
                                 crypt_config.clone(),
-                                manifest.clone(),
+                                manifest,
                                 registry.clone(),
                                 known_chunks.clone(),
                                 device_name,
