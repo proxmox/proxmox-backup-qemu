@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.1.7-1) unstable; urgency=medium
+
+  * add support for incremental backups
+
+ -- Proxmox Support Team <support@proxmox.com>  Fri, 26 Jun 2020 11:43:55 +0200
+
 proxmox-backup-qemu (0.1.6-1) unstable; urgency=medium
 
   * fix backing up images that are not multiples of 'chunk_size'
