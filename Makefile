@@ -19,6 +19,7 @@ endif
 all:
 ifneq ($(BUILD_MODE), skip)
 	cargo build $(CARGO_BUILD_ARGS)
+	diff -up current-api.h proxmox-backup-qemu.h
 endif
 
 # always re-create this dir
@@ -27,7 +28,8 @@ endif
 build:
 	rm -rf build
 	cargo build --release
-	rsync -a debian Makefile Cargo.toml Cargo.lock build.rs proxmox-backup-qemu.h src target build/
+	diff -up current-api.h proxmox-backup-qemu.h
+	rsync -a debian Makefile Cargo.toml Cargo.lock build.rs proxmox-backup-qemu.h src target current-api.h build/
 
 .PHONY: install
 install: target/release/libproxmox_backup_qemu.so
