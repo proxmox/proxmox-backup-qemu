@@ -159,14 +159,18 @@ fn backup_worker_task(
 
                         let last_manifest = writer.download_previous_manifest().await;
                         let mut manifest_guard = manifest.lock().unwrap();
+                        let mut result = 0;
                         *manifest_guard = match last_manifest {
-                            Ok(last_manifest) => Some(Arc::new(last_manifest)),
+                            Ok(last_manifest) => {
+                                result = 1;
+                                Some(Arc::new(last_manifest))
+                            },
                             Err(_) => None
                         };
 
                         let mut client_guard = client.lock().unwrap();
                         *client_guard = Some(writer);
-                        Ok(0)
+                        Ok(result)
                     };
 
                     tokio::spawn(handle_async_command(command_future, abort.listen(), callback_info));

@@ -204,6 +204,11 @@ pub extern "C" fn proxmox_backup_new(
 }
 
 /// Open connection to the backup server (sync)
+///
+/// Returns:
+///  0 ... Sucecss (no prevbious backup)
+///  1 ... Success (found previous backup)
+/// -1 ... Error
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_connect(
@@ -234,6 +239,11 @@ pub extern "C" fn proxmox_backup_connect(
 }
 
 /// Open connection to the backup server
+///
+/// Returns:
+///  0 ... Sucecss (no prevbious backup)
+///  1 ... Success (found previous backup)
+/// -1 ... Error
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_connect_async(
