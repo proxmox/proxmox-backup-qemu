@@ -5,7 +5,10 @@ PACKAGE=libproxmox-backup-qemu0
 ARCH:=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
 GITVERSION:=$(shell git rev-parse HEAD)
 
-DEBS=${PACKAGE}_${DEB_VERSION}_${ARCH}.deb ${PACKAGE}-dev_${DEB_VERSION}_${ARCH}.deb
+DEBS=							\
+	${PACKAGE}_${DEB_VERSION}_${ARCH}.deb		\
+	${PACKAGE}-dev_${DEB_VERSION}_${ARCH}.deb	\
+	${PACKAGE}-dbgsym_${DEB_VERSION}_${ARCH}.deb
 
 DESTDIR=
 
