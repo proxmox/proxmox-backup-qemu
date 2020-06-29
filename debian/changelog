@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.1.8-1) unstable; urgency=medium
+
+  * proxmox_backup_connect: return info about previous backup
+
+ -- Proxmox Support Team <support@proxmox.com>  Mon, 29 Jun 2020 09:35:43 +0200
+
 proxmox-backup-qemu (0.1.7-1) unstable; urgency=medium
 
   * add support for incremental backups
