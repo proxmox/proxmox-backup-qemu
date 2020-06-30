@@ -1,5 +1,5 @@
 use anyhow::{bail, format_err, Error};
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::ptr;
 use std::os::raw::{c_uchar, c_char, c_int, c_void};
 use std::sync::{Mutex, Condvar};
@@ -21,6 +21,8 @@ use worker_task::*;
 
 mod restore;
 use restore::*;
+
+mod tools;
 
 pub const PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE: u64 = 1024*1024*4;
 
@@ -147,36 +149,19 @@ pub extern "C" fn proxmox_backup_new(
 ) -> *mut ProxmoxBackupHandle {
 
     let task: Result<_, Error> = try_block!({
-        let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
-        let repo: BackupRepository = repo.parse()?;
+        let repo: BackupRepository = tools::utf8_c_string(repo)?
+            .ok_or_else(|| format_err!("repo must not be NULL"))?
+            .parse()?;
 
-        let backup_id = unsafe { CStr::from_ptr(backup_id).to_str()?.to_owned() };
+        let backup_id = tools::utf8_c_string(backup_id)?
+            .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
 
         let backup_time = Utc.timestamp(backup_time as i64, 0);
 
-        let password = if password.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_ptr(password).to_str()?.to_owned() })
-        };
-
-        let keyfile = if keyfile.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_ptr(keyfile).to_str().map(std::path::PathBuf::from)? })
-        };
-
-        let key_password = if key_password.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_ptr(key_password).to_str()?.to_owned() })
-        };
-
-        let fingerprint = if fingerprint.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_ptr(fingerprint).to_str()?.to_owned() })
-        };
+        let password = tools::utf8_c_string(password)?;
+        let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
+        let key_password = tools::utf8_c_string(key_password)?;
+        let fingerprint = tools::utf8_c_string(fingerprint)?;
 
         let setup = BackupSetup {
             host: repo.host().to_owned(),
@@ -282,7 +267,7 @@ pub extern "C" fn proxmox_backup_abort(
 ) {
     let task = unsafe { &mut *(handle as * mut BackupTask) };
 
-    let reason = unsafe { CStr::from_ptr(reason).to_string_lossy().into_owned() };
+    let reason = unsafe { tools::utf8_c_string_lossy_non_null(reason) };
     task.aborted = Some(reason);
 
     let _res = task.command_tx.send(BackupMessage::Abort);
@@ -310,7 +295,7 @@ pub extern "C" fn proxmox_backup_register_image(
 
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
-    let device_name = unsafe { CStr::from_ptr(device_name).to_string_lossy().to_string() };
+    let device_name = unsafe { tools::utf8_c_string_lossy_non_null(device_name) };
 
     let msg = BackupMessage::RegisterImage { device_name, size, callback_info, incremental };
 
@@ -351,7 +336,7 @@ pub extern "C" fn proxmox_backup_register_image_async(
         return;
     }
 
-    let device_name = unsafe { CStr::from_ptr(device_name).to_string_lossy().to_string() };
+    let device_name = unsafe { tools::utf8_c_string_lossy_non_null(device_name) };
 
     let msg = BackupMessage::RegisterImage { device_name, size, callback_info, incremental };
 
@@ -382,7 +367,7 @@ pub extern "C" fn proxmox_backup_add_config(
 
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
-    let name = unsafe { CStr::from_ptr(name).to_string_lossy().to_string() };
+    let name = unsafe { tools::utf8_c_string_lossy_non_null(name) };
 
     let msg = BackupMessage::AddConfig {
         name,
@@ -424,7 +409,7 @@ pub extern "C" fn proxmox_backup_add_config_async(
         return;
     }
 
-    let name = unsafe { CStr::from_ptr(name).to_string_lossy().to_string() };
+    let name = unsafe { tools::utf8_c_string_lossy_non_null(name) };
 
     let msg = BackupMessage::AddConfig {
         name,
@@ -683,11 +668,13 @@ pub extern "C" fn proxmox_restore_connect(
 ) -> *mut ProxmoxRestoreHandle {
 
     let result: Result<_, Error> = try_block!({
-        let repo = unsafe { CStr::from_ptr(repo).to_str()?.to_owned() };
-        let repo: BackupRepository = repo.parse()?;
+        let repo: BackupRepository = tools::utf8_c_string(repo)?
+            .ok_or_else(|| format_err!("repo must not be NULL"))?
+            .parse()?;
 
-        let snapshot = unsafe { CStr::from_ptr(snapshot).to_string_lossy().into_owned() };
-        let snapshot: BackupDir = snapshot.parse()?;
+        let snapshot: BackupDir = tools::utf8_c_string_lossy(snapshot)
+            .ok_or_else(|| format_err!("snapshot must not be NULL"))?
+            .parse()?;
 
         let backup_type = snapshot.group().backup_type();
         let backup_id = snapshot.group().backup_id().to_owned();
@@ -697,29 +684,10 @@ pub extern "C" fn proxmox_restore_connect(
             bail!("wrong backup type ({} != vm)", backup_type);
         }
 
-        let password = if password.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_ptr(password).to_str()?.to_owned() })
-        };
-
-        let keyfile = if keyfile.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_ptr(keyfile).to_str().map(std::path::PathBuf::from)? })
-        };
-
-        let key_password = if key_password.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_ptr(key_password).to_str()?.to_owned() })
-        };
-
-        let fingerprint = if fingerprint.is_null() {
-            None
-        } else {
-            Some(unsafe { CStr::from_ptr(fingerprint).to_str()?.to_owned() })
-        };
+        let password = tools::utf8_c_string(password)?;
+        let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
+        let key_password = tools::utf8_c_string(key_password)?;
+        let fingerprint = tools::utf8_c_string(fingerprint)?;
 
         let setup = BackupSetup {
             host: repo.host().to_owned(),
@@ -775,7 +743,8 @@ pub extern "C" fn proxmox_restore_image(
 
     let result: Result<_, Error> = try_block!({
 
-        let archive_name = unsafe { CStr::from_ptr(archive_name).to_str()?.to_owned() };
+        let archive_name = tools::utf8_c_string(archive_name)?
+            .ok_or_else(|| format_err!("archive_name must not be NULL"))?;
 
         let write_data_callback = move |offset: u64, data: &[u8]| {
             callback(callback_data, offset, data.as_ptr(), data.len() as u64)
