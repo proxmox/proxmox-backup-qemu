@@ -1,3 +1,10 @@
+proxmox-backup-qemu (0.2.0-1) unstable; urgency=medium
+
+  * depend on proxmox-backup v0.5.0 with, among other, incremental backup
+    support
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 30 Jun 2020 12:27:03 +0200
+
 proxmox-backup-qemu (0.1.8-1) unstable; urgency=medium
 
   * proxmox_backup_connect: return info about previous backup
