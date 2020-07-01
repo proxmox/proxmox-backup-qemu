@@ -161,7 +161,7 @@ pub(crate) async fn register_image(
             }
 
         } else {
-            bail!("no previous backups in this session, cannot do incremental one");
+            bail!("no previous backups in this session, cannot do incremental backup");
         }
     }
 
