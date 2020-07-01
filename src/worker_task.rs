@@ -17,8 +17,8 @@ pub(crate) struct BackupTask {
     runtime: tokio::runtime::Runtime,
     crypt_config: Option<Arc<CryptConfig>>,
     writer: Option<Arc<BackupWriter>>,
-    last_manifest: Option<Arc<BackupManifest>>,
-    registry: Arc<Mutex<ImageRegistry>>, // fixme Arc/Mutex???
+    last_manifest: Option<BackupManifest>,
+    registry: ImageRegistry,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     abort: tokio::sync::broadcast::Sender<()>,
     aborted: Option<String>,  // set on abort, conatins abort reason
@@ -53,7 +53,7 @@ impl BackupTask {
 
         let (abort, _) = tokio::sync::broadcast::channel(16); // fixme: 16??
 
-        let registry = Arc::new(Mutex::new(ImageRegistry::new()));
+        let registry = ImageRegistry::new();
         let known_chunks = Arc::new(Mutex::new(HashSet::new()));
 
         Ok(Self { runtime, setup, crypt_config, abort, registry, known_chunks,
@@ -90,7 +90,7 @@ impl BackupTask {
 
         let last_manifest = writer.download_previous_manifest().await;
         if let Ok(last_manifest) = last_manifest {
-            self.last_manifest = Some(Arc::new(last_manifest));
+            self.last_manifest = Some(last_manifest);
         }
 
         self.writer = Some(writer);
@@ -122,7 +122,7 @@ impl BackupTask {
 
         let command_future = add_config(
             writer,
-            self.registry.clone(),
+            &mut self.registry,
             name,
             data,
             size);
@@ -151,7 +151,7 @@ impl BackupTask {
         let command_future = write_data(
             writer,
             self.crypt_config.clone(),
-            self.registry.clone(),
+            &mut self.registry,
             self.known_chunks.clone(),
             dev_id,
             data,
@@ -181,8 +181,8 @@ impl BackupTask {
         let command_future = register_image(
             writer,
             self.crypt_config.clone(),
-            self.last_manifest.clone(),
-            self.registry.clone(),
+            &self.last_manifest,
+            &mut self.registry,
             self.known_chunks.clone(),
             device_name,
             size,
@@ -206,7 +206,7 @@ impl BackupTask {
             None => bail!("not connected"),
         };
 
-        let command_future = close_image(writer, self.registry.clone(), dev_id);
+        let command_future = close_image(writer, &mut self.registry, dev_id);
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
@@ -222,11 +222,7 @@ impl BackupTask {
             None => bail!("not connected"),
         };
 
-        let command_future = finish_backup(
-            writer,
-            self.registry.clone(), // fixme: pass ref
-            self.setup.clone(), // fixme: pass ref
-        );
+        let command_future = finish_backup(writer, &self.registry, &self.setup);
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
