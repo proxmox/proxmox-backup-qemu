@@ -90,7 +90,7 @@ async fn register_zero_chunk(
 
 pub(crate) async fn add_config(
     client: Arc<BackupWriter>,
-    registry: &mut ImageRegistry,
+    registry: Arc<Mutex<ImageRegistry>>,
     name: String,
     data: Vec<u8>,
 ) -> Result<c_int, Error> {
@@ -100,7 +100,8 @@ pub(crate) async fn add_config(
 
     let stats = client.upload_blob_from_data(data, &blob_name, true, Some(false)).await?;
 
-    registry.file_list.push(json!({
+    let mut guard = registry.lock().unwrap();
+    guard.file_list.push(json!({
         "filename": blob_name,
         "size": stats.size,
         "csum": proxmox::tools::digest_to_hex(&stats.csum),
@@ -112,8 +113,8 @@ pub(crate) async fn add_config(
 pub(crate) async fn register_image(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
-    manifest: &Option<BackupManifest>,
-    registry: &mut ImageRegistry,
+    manifest: Option<Arc<BackupManifest>>,
+    registry: Arc<Mutex<ImageRegistry>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     device_name: String,
     device_size: u64,
@@ -125,7 +126,7 @@ pub(crate) async fn register_image(
 
     let index = match manifest {
         Some(manifest) => {
-            Some(client.download_previous_fixed_index(&archive_name, manifest, known_chunks.clone()).await?)
+            Some(client.download_previous_fixed_index(&archive_name, &manifest, known_chunks.clone()).await?)
         },
         None => None
     };
@@ -186,23 +187,25 @@ pub(crate) async fn register_image(
         device_size,
         upload_queue: Some(upload_queue),
         upload_result: Some(upload_result),
-    };
+   };
 
-    let dev_id = registry.register(info)?;
+    let mut guard = registry.lock().unwrap();
+    let dev_id = guard.register(info)?;
 
     Ok(dev_id as c_int)
 }
 
 pub(crate) async fn close_image(
     client: Arc<BackupWriter>,
-    registry: &mut ImageRegistry,
+    registry: Arc<Mutex<ImageRegistry>>,
     dev_id: u8,
 ) -> Result<c_int, Error> {
 
     //println!("close image {}", dev_id);
 
     let (wid, upload_result, device_name, device_size) = {
-        let info = registry.lookup(dev_id)?;
+        let mut guard = registry.lock().unwrap();
+        let info = guard.lookup(dev_id)?;
 
         info.upload_queue.take(); // close
 
@@ -230,14 +233,16 @@ pub(crate) async fn close_image(
 
     let _value = client.post("fixed_close", Some(param)).await?;
 
-    let info = registry.lookup(dev_id)?;
     {
+        let mut reg_guard = registry.lock().unwrap();
+        let info = reg_guard.lookup(dev_id)?;
         let mut prev_csum_guard = PREVIOUS_CSUMS.lock().unwrap();
 
         prev_csum_guard.insert(info.device_name.clone(), proxmox::tools::hex_to_digest(&csum).unwrap());
     }
 
-    registry.file_list.push(json!({
+    let mut guard = registry.lock().unwrap();
+    guard.file_list.push(json!({
         "filename": format!("{}.img.fidx", device_name),
         "size": device_size,
         "csum": csum.clone(),
@@ -250,7 +255,7 @@ pub(crate) async fn close_image(
 pub(crate) async fn write_data(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
-    registry: &mut ImageRegistry,
+    registry: Arc<Mutex<ImageRegistry>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     dev_id: u8,
     data: DataPointer,
@@ -262,7 +267,9 @@ pub(crate) async fn write_data(
     //println!("dev {}: write {} {}", dev_id, offset, size);
 
     let (wid, mut upload_queue, zero_chunk_digest) = {
-        let info = registry.lookup(dev_id)?;
+        let mut guard = registry.lock().unwrap();
+        let info = guard.lookup(dev_id)?;
+
 
         (info.wid, info.upload_queue.clone(), info.zero_chunk_digest)
     };
@@ -333,7 +340,8 @@ pub(crate) async fn write_data(
             // Phase 2: send reponse future to other task
             if upload_queue.send(upload_future).await.is_err() {
                 let upload_result = {
-                    let info = registry.lookup(dev_id)?;
+                    let mut guard = registry.lock().unwrap();
+                    let info = guard.lookup(dev_id)?;
                     info.upload_queue.take(); // close
                     info.upload_result.take()
                 };
@@ -360,18 +368,20 @@ pub(crate) async fn write_data(
 
 pub(crate) async fn finish_backup(
     client: Arc<BackupWriter>,
-    registry: &ImageRegistry,
-    setup: &BackupSetup,
+    registry: Arc<Mutex<ImageRegistry>>,
+    setup: BackupSetup,
 ) -> Result<c_int, Error> {
 
     //println!("call finish");
 
     let index_data = {
+        let guard = registry.lock().unwrap();
+
         let index = json!({
             "backup-type": "vm",
             "backup-id": setup.backup_id,
             "backup-time": setup.backup_time.timestamp(),
-            "files": &registry.file_list,
+            "files": &guard.file_list,
         });
 
         //println!("Upload index.json");
