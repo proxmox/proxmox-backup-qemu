@@ -339,10 +339,10 @@ pub extern "C" fn proxmox_backup_add_config(
 
     let name = unsafe { tools::utf8_c_string_lossy_non_null(name) };
 
-    let data = DataPointer(data); // fixme
+    let data: Vec<u8> = unsafe { std::slice::from_raw_parts(data, size as usize).to_vec() };
 
     task.runtime().spawn(async move {
-        let result = task.add_config(name, data, size).await;
+        let result = task.add_config(name, data).await;
         callback_info.send_result(result);
     });
 
@@ -371,15 +371,19 @@ pub extern "C" fn proxmox_backup_add_config_async(
     let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     let name = unsafe { tools::utf8_c_string_lossy_non_null(name) };
-    let data = DataPointer(data); // fixme
+    let data: Vec<u8> = unsafe { std::slice::from_raw_parts(data, size as usize).to_vec() };
 
     task.runtime().spawn(async move {
-        let result = task.add_config(name, data, size).await;
+        let result = task.add_config(name, data).await;
         callback_info.send_result(result);
     });
 }
 
 /// Write data to into a registered image (sync)
+///
+/// Upload a chunk of data for the <dev_id> image.
+///
+/// data may be NULL in order to write the zero chunk (only allowed if size == chunk_size)
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_write_data(
@@ -411,6 +415,8 @@ pub extern "C" fn proxmox_backup_write_data(
 /// Write data to into a registered image
 ///
 /// Upload a chunk of data for the <dev_id> image.
+///
+/// data may be NULL in order to write the zero chunk (only allowed if size == chunk_size)
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_write_data_async(

@@ -196,6 +196,10 @@ void proxmox_backup_register_image_async(ProxmoxBackupHandle *handle,
 
 /**
  * Write data to into a registered image (sync)
+ *
+ * Upload a chunk of data for the <dev_id> image.
+ *
+ * data may be NULL in order to write the zero chunk (only allowed if size == chunk_size)
  */
 int proxmox_backup_write_data(ProxmoxBackupHandle *handle,
                               uint8_t dev_id,
@@ -208,6 +212,8 @@ int proxmox_backup_write_data(ProxmoxBackupHandle *handle,
  * Write data to into a registered image
  *
  * Upload a chunk of data for the <dev_id> image.
+ *
+ * data may be NULL in order to write the zero chunk (only allowed if size == chunk_size)
  */
 void proxmox_backup_write_data_async(ProxmoxBackupHandle *handle,
                                      uint8_t dev_id,

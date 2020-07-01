@@ -92,15 +92,11 @@ pub(crate) async fn add_config(
     client: Arc<BackupWriter>,
     registry: &mut ImageRegistry,
     name: String,
-    data: DataPointer,
-    size: u64,
+    data: Vec<u8>,
 ) -> Result<c_int, Error> {
     //println!("add config {} size {}", name, size);
 
     let blob_name = format!("{}.blob", name);
-
-    let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
-    let data = data.to_vec();
 
     let stats = client.upload_blob_from_data(data, &blob_name, true, Some(false)).await?;
 

@@ -51,7 +51,7 @@ impl BackupTask {
             }
         };
 
-        let (abort, _) = tokio::sync::broadcast::channel(16); // fixme: 16??
+        let (abort, _) = tokio::sync::broadcast::channel(16);
 
         let registry = ImageRegistry::new();
         let known_chunks = Arc::new(Mutex::new(HashSet::new()));
@@ -109,8 +109,7 @@ impl BackupTask {
     pub async fn add_config(
         &mut self,
         name: String,
-        data: DataPointer, // fixme: use [u8]
-        size: u64,
+        data: Vec<u8>,
     ) -> Result<c_int, Error> {
 
         self.check_aborted()?;
@@ -120,12 +119,7 @@ impl BackupTask {
             None => bail!("not connected"),
         };
 
-        let command_future = add_config(
-            writer,
-            &mut self.registry,
-            name,
-            data,
-            size);
+        let command_future = add_config(writer, &mut self.registry, name, data);
 
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
@@ -134,7 +128,7 @@ impl BackupTask {
     pub async fn write_data(
         &mut self,
         dev_id: u8,
-        data: DataPointer,
+        data: DataPointer, // this may be null
         offset: u64,
         size: u64,
     ) -> Result<c_int, Error> {
