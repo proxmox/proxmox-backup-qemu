@@ -48,37 +48,3 @@ pub struct ProxmoxRestoreHandle;
 /// Opaque handle for backups jobs
 #[repr(C)]
 pub struct ProxmoxBackupHandle;
-
-pub(crate) enum BackupMessage {
-    End,
-    Abort,
-    Connect {
-        callback_info: CallbackPointers,
-    },
-    AddConfig {
-        name: String,
-        data: DataPointer,
-        size: u64,
-        callback_info: CallbackPointers,
-    },
-    RegisterImage {
-        device_name: String,
-        size: u64,
-        incremental: bool,
-        callback_info: CallbackPointers,
-    },
-    CloseImage {
-        dev_id: u8,
-        callback_info: CallbackPointers,
-    },
-    WriteData {
-        dev_id: u8,
-        data: DataPointer,
-        offset: u64,
-        size: u64,
-        callback_info: CallbackPointers,
-    },
-    Finish {
-        callback_info: CallbackPointers,
-    },
-}

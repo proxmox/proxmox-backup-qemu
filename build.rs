@@ -5,7 +5,6 @@ use std::env;
 
 fn main() {
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-
     let header = std::fs::read_to_string("header-preamble.c").unwrap();
 
     cbindgen::Builder::new()

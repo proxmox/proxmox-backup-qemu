@@ -184,8 +184,6 @@ int proxmox_backup_register_image(ProxmoxBackupHandle *handle,
  * Create a new image archive on the backup server
  * ('<device_name>.img.fidx'). The returned integer is the dev_id
  * parameter for the proxmox_backup_write_data_async() method.
- *
- * Note: This call is currently not async and can block.
  */
 void proxmox_backup_register_image_async(ProxmoxBackupHandle *handle,
                                          const char *device_name,
