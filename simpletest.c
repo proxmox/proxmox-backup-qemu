@@ -34,7 +34,7 @@ void main(int argc, char **argv) {
   }
 
   printf("connect\n");
-  if (proxmox_backup_connect(pbs, &pbs_error) != 0) {
+  if (proxmox_backup_connect(pbs, &pbs_error) < 0) {
     fprintf(stderr, "proxmox_backup_connect failed - %s\n", pbs_error);
     proxmox_backup_free_error(pbs_error);
     exit(-1);
