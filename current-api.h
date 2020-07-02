@@ -213,7 +213,11 @@ int proxmox_backup_write_data(ProxmoxBackupHandle *handle,
  *
  * Upload a chunk of data for the <dev_id> image.
  *
- * data may be NULL in order to write the zero chunk (only allowed if size == chunk_size)
+ * The data pointer may be NULL in order to write the zero chunk
+ * (only allowed if size == chunk_size)
+ *
+ * Note: The data pointer needs to be valid until the async
+ * opteration is finished.
  */
 void proxmox_backup_write_data_async(ProxmoxBackupHandle *handle,
                                      uint8_t dev_id,
