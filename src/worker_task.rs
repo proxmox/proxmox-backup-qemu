@@ -72,7 +72,10 @@ impl BackupTask {
     }
 
     pub fn abort(&self, reason: String) {
-        let _ = self.abort.send(()); // fixme: ignore errors?
+        if let Err(_) = self.abort.send(()) {
+            // should not happen, but log to stderr
+            eprintln!("BackupTask send abort failed.");
+        }
         let mut aborted = self.aborted.lock().unwrap();
         if (*aborted).is_none() {
             *aborted = Some(reason);

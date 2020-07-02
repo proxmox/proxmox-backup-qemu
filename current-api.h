@@ -230,9 +230,7 @@ void proxmox_backup_write_data_async(ProxmoxBackupHandle *handle,
                                      char **error);
 
 /**
- * Simple interface to restore images
- *
- * Connect the the backup server.
+ * Connect the the backup server for restore
  *
  * Note: This implementation is not async
  */
