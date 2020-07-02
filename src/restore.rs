@@ -1,17 +1,26 @@
 use anyhow::{bail, Error};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use proxmox_backup::tools::runtime::{get_runtime, block_on};
 use proxmox_backup::backup::*;
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
 
 use super::BackupSetup;
+use crate::commands::Registry;
+
+pub struct ImageAccessInfo {
+    pub reader: Arc<RemoteChunkReader>,
+    pub index: Arc<FixedIndexReader>,
+    pub archive_name: String,
+    pub archive_size: u64,
+}
 
 pub(crate) struct ProxmoxRestore {
     _runtime: Arc<tokio::runtime::Runtime>,
     pub client: Arc<BackupReader>,
     pub crypt_config: Option<Arc<CryptConfig>>,
     pub manifest: BackupManifest,
+    pub registry: Arc<Mutex<Registry<ImageAccessInfo>>>,
 }
 
 impl ProxmoxRestore {
@@ -64,6 +73,7 @@ impl ProxmoxRestore {
             manifest,
             client,
             crypt_config,
+            registry: Arc::new(Mutex::new(Registry::<ImageAccessInfo>::new())),
         })
     }
 

@@ -21,7 +21,7 @@ lazy_static!{
     };
 }
 
-struct ImageUploadInfo {
+pub struct ImageUploadInfo {
     wid: u64,
     device_name: String,
     zero_chunk_digest: [u8; 32],
@@ -30,34 +30,34 @@ struct ImageUploadInfo {
     upload_result: Option<UploadResultReceiver>,
 }
 
-pub (crate) struct ImageRegistry {
-    upload_info: Vec<ImageUploadInfo>,
+pub struct Registry<T> {
+    pub info_list: Vec<T>,
     file_list: Vec<Value>,
 }
 
-impl ImageRegistry {
+impl<T> Registry<T> {
 
     pub fn new() -> Self {
         Self {
-            upload_info: Vec::new(),
+            info_list: Vec::new(),
             file_list: Vec::new(),
         }
     }
 
-    fn register(&mut self, info: ImageUploadInfo) -> Result<u8, Error> {
-        let dev_id = self.upload_info.len();
+    pub fn register(&mut self, info: T) -> Result<u8, Error> {
+        let dev_id = self.info_list.len();
         if dev_id > 255 {
-            bail!("register image faild - to many images (limit is 255)");
+            bail!("register failed - too many images/archives (limit is 255)");
         }
-        self.upload_info.push(info);
+        self.info_list.push(info);
         Ok(dev_id as u8)
     }
 
-    fn lookup(&mut self, dev_id: u8) -> Result<&mut ImageUploadInfo, Error> {
-        if dev_id as usize >= self.upload_info.len() {
-            bail!("image lookup failed for dev_id = {}", dev_id);
+    pub fn lookup(&mut self, id: u8) -> Result<&mut T, Error> {
+        if id as usize >= self.info_list.len() {
+            bail!("lookup failed for id = {}", id);
         }
-        Ok(&mut self.upload_info[dev_id as usize])
+        Ok(&mut self.info_list[id as usize])
     }
 }
 
@@ -90,7 +90,7 @@ async fn register_zero_chunk(
 
 pub(crate) async fn add_config(
     client: Arc<BackupWriter>,
-    registry: Arc<Mutex<ImageRegistry>>,
+    registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     name: String,
     data: Vec<u8>,
 ) -> Result<c_int, Error> {
@@ -114,7 +114,7 @@ pub(crate) async fn register_image(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
     manifest: Option<Arc<BackupManifest>>,
-    registry: Arc<Mutex<ImageRegistry>>,
+    registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     device_name: String,
     device_size: u64,
@@ -197,7 +197,7 @@ pub(crate) async fn register_image(
 
 pub(crate) async fn close_image(
     client: Arc<BackupWriter>,
-    registry: Arc<Mutex<ImageRegistry>>,
+    registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     dev_id: u8,
 ) -> Result<c_int, Error> {
 
@@ -255,7 +255,7 @@ pub(crate) async fn close_image(
 pub(crate) async fn write_data(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
-    registry: Arc<Mutex<ImageRegistry>>,
+    registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     dev_id: u8,
     data: DataPointer,
@@ -372,7 +372,7 @@ pub(crate) async fn write_data(
 
 pub(crate) async fn finish_backup(
     client: Arc<BackupWriter>,
-    registry: Arc<Mutex<ImageRegistry>>,
+    registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     setup: BackupSetup,
 ) -> Result<c_int, Error> {
 
