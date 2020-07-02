@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.3.0-1) unstable; urgency=medium
+
+  * make backup C api thread safe
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 02 Jul 2020 07:42:42 +0200
+
 proxmox-backup-qemu (0.2.0-1) unstable; urgency=medium
 
   * depend on proxmox-backup v0.5.0 with, among other, incremental backup
