@@ -558,10 +558,15 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
     unsafe { Box::from_raw(task) }; // take ownership, drop(task)
 }
 
+// Simple interface to restore images
 
-/// Simple interface to restore images
-///
-/// Connect the the backup server.
+fn restore_handle_to_conn(handle: *mut ProxmoxRestoreHandle) -> Arc<ProxmoxRestore> {
+    let conn = unsafe { & *(handle as *const Arc<ProxmoxRestore>) };
+    // increase reference count while we use it inside rust
+    conn.clone()
+}
+
+/// Connect the the backup server for restore
 ///
 /// Note: This implementation is not async
 #[no_mangle]
@@ -616,8 +621,8 @@ pub extern "C" fn proxmox_restore_connect(
 
     match result {
         Ok(conn) => {
-            let boxed_task = Box::new(conn);
-            Box::into_raw(boxed_task) as * mut ProxmoxRestoreHandle
+            let boxed_conn = Box::new(Arc::new(conn));
+            Box::into_raw(boxed_conn) as * mut ProxmoxRestoreHandle
         }
         Err(err) => raise_error_null!(error, err),
     }
@@ -630,7 +635,7 @@ pub extern "C" fn proxmox_restore_connect(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) {
 
-    let conn = handle as * mut ProxmoxRestore;
+    let conn = handle as * mut Arc<ProxmoxRestore>;
     unsafe { Box::from_raw(conn) }; //drop(conn)
 }
 
@@ -648,7 +653,7 @@ pub extern "C" fn proxmox_restore_image(
     verbose: bool,
 ) -> c_int {
 
-    let conn = unsafe { &mut *(handle as * mut ProxmoxRestore) };
+    let conn = restore_handle_to_conn(handle);
 
     let result: Result<_, Error> = try_block!({
 

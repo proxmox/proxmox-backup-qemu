@@ -68,7 +68,7 @@ impl ProxmoxRestore {
     }
 
     pub fn restore(
-        &mut self,
+        &self,
         archive_name: String,
         write_data_callback: impl Fn(u64, &[u8]) -> i32,
         write_zero_callback: impl Fn(u64, u64) -> i32,
