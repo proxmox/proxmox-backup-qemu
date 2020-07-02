@@ -218,8 +218,8 @@ impl BackupTask {
 
         let command_future = finish_backup(
             writer,
-            self.registry.clone(), // fixme: pass ref
-            self.setup.clone(), // fixme: pass ref
+            self.registry.clone(),
+            self.setup.clone(),
         );
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await

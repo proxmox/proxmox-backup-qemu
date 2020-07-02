@@ -215,7 +215,7 @@ pub extern "C" fn proxmox_backup_connect(
 
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
-    task.runtime().spawn(async move { // do not use move here???!!
+    task.runtime().spawn(async move {
         let result = task.connect().await;
         callback_info.send_result(result);
     });
@@ -405,7 +405,7 @@ pub extern "C" fn proxmox_backup_write_data(
     let mut got_result_condition = GotResultCondition::new();
 
     let callback_info = got_result_condition.callback_info(&mut result, error);
-    let data = DataPointer(data); // fixme
+    let data = DataPointer(data);
 
     task.runtime().spawn(async move {
         let result = task.write_data(dev_id, data, offset, size).await;
@@ -441,7 +441,7 @@ pub extern "C" fn proxmox_backup_write_data_async(
 ) {
     let task = backup_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
-    let data = DataPointer(data); // fixme
+    let data = DataPointer(data);
 
     task.runtime().spawn(async move {
         let result = task.write_data(dev_id, data, offset, size).await;
@@ -553,7 +553,7 @@ pub extern "C" fn proxmox_backup_finish_async(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 
-    let task = handle as * mut Arc<BackupTask>; // fixme: why * mut ??
+    let task = handle as * mut Arc<BackupTask>;
 
     unsafe { Box::from_raw(task) }; // take ownership, drop(task)
 }
