@@ -199,7 +199,13 @@ void proxmox_backup_register_image_async(ProxmoxBackupHandle *handle,
  *
  * Upload a chunk of data for the <dev_id> image.
  *
- * data may be NULL in order to write the zero chunk (only allowed if size == chunk_size)
+ * The data pointer may be NULL in order to write the zero chunk
+ * (only allowed if size == chunk_size)
+ *
+ * Returns:
+ * -1: on error
+ *  0: successful, chunk already exists on server, so it was resued
+ *  size: successful, chunk uploaded
  */
 int proxmox_backup_write_data(ProxmoxBackupHandle *handle,
                               uint8_t dev_id,
@@ -218,6 +224,11 @@ int proxmox_backup_write_data(ProxmoxBackupHandle *handle,
  *
  * Note: The data pointer needs to be valid until the async
  * opteration is finished.
+ *
+ * Returns:
+ * -1: on error
+ *  0: successful, chunk already exists on server, so it was resued
+ *  size: successful, chunk uploaded
  */
 void proxmox_backup_write_data_async(ProxmoxBackupHandle *handle,
                                      uint8_t dev_id,

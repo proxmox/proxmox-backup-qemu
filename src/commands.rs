@@ -274,12 +274,15 @@ pub(crate) async fn write_data(
         (info.wid, info.upload_queue.clone(), info.zero_chunk_digest)
     };
 
+    let mut reused = false;
+
     let upload_future: Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin> = {
         if data.0.is_null() {
             if size != chunk_size {
                 bail!("write_data: got invalid null chunk");
             }
             let upload_info = ChunkUploadInfo { digest: zero_chunk_digest, offset, size, chunk_is_known: true };
+            reused = true;
             Box::new(futures::future::ok(upload_info))
         } else {
             let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
@@ -299,6 +302,7 @@ pub(crate) async fn write_data(
 
             if chunk_is_known {
                 let upload_info = ChunkUploadInfo { digest: *digest, offset, size, chunk_is_known: true };
+                reused = true;
                 Box::new(futures::future::ok(upload_info))
            } else {
                 let (chunk, digest) = chunk_builder.build()?;
@@ -363,7 +367,7 @@ pub(crate) async fn write_data(
 
     //println!("upload chunk sucessful");
 
-    Ok(size as c_int)
+    Ok(if reused { 0 } else { size as c_int })
 }
 
 pub(crate) async fn finish_backup(
