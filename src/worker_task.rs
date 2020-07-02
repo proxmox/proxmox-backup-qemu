@@ -18,7 +18,7 @@ pub(crate) struct BackupTask {
     crypt_config: Option<Arc<CryptConfig>>,
     writer: Mutex<Option<Arc<BackupWriter>>>,
     last_manifest: Mutex<Option<Arc<BackupManifest>>>,
-    registry: Arc<Mutex<ImageRegistry>>, // fixme Arc/Mutex???
+    registry: Arc<Mutex<ImageRegistry>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     abort: tokio::sync::broadcast::Sender<()>,
     aborted: Mutex<Option<String>>,  // set on abort, conatins abort reason

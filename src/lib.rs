@@ -189,7 +189,7 @@ pub extern "C" fn proxmox_backup_new(
     }
 }
 
-fn handle_to_task(handle: *mut ProxmoxBackupHandle) -> Arc<BackupTask> {
+fn backup_handle_to_task(handle: *mut ProxmoxBackupHandle) -> Arc<BackupTask> {
     let task = unsafe { & *(handle as *const Arc<BackupTask>) };
     // increase reference count while we use it inside rust
     task.clone()
@@ -207,7 +207,7 @@ pub extern "C" fn proxmox_backup_connect(
     handle: *mut ProxmoxBackupHandle,
     error: *mut *mut c_char,
 ) -> c_int {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
 
     let mut result: c_int = -1;
 
@@ -240,7 +240,7 @@ pub extern "C" fn proxmox_backup_connect_async(
     result: *mut c_int,
     error: *mut *mut c_char,
 ) {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     task.runtime().spawn(async move {
@@ -260,7 +260,7 @@ pub extern "C" fn proxmox_backup_abort(
     handle: *mut ProxmoxBackupHandle,
     reason: *const c_char,
 ) {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
     let reason = unsafe { tools::utf8_c_string_lossy_non_null(reason) };
     task.abort(reason);
 }
@@ -276,7 +276,7 @@ pub extern "C" fn proxmox_backup_register_image(
     incremental: bool,
     error: * mut * mut c_char,
 ) -> c_int {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
 
     let mut result: c_int = -1;
 
@@ -312,7 +312,7 @@ pub extern "C" fn proxmox_backup_register_image_async(
     result: *mut c_int,
     error: * mut * mut c_char,
 ) {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     let device_name = unsafe { tools::utf8_c_string_lossy_non_null(device_name) };
@@ -333,7 +333,7 @@ pub extern "C" fn proxmox_backup_add_config(
     size: u64,
     error: * mut * mut c_char,
 ) -> c_int {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
 
     let mut result: c_int = -1;
 
@@ -370,7 +370,7 @@ pub extern "C" fn proxmox_backup_add_config_async(
     result: *mut c_int,
     error: * mut * mut c_char,
 ) {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
 
     let callback_info = CallbackPointers { callback, callback_data, error, result };
 
@@ -398,7 +398,7 @@ pub extern "C" fn proxmox_backup_write_data(
     size: u64,
     error: * mut * mut c_char,
 ) -> c_int {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
 
     let mut result: c_int = -1;
 
@@ -439,7 +439,7 @@ pub extern "C" fn proxmox_backup_write_data_async(
     result: *mut c_int,
     error: * mut * mut c_char,
 ) {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
     let data = DataPointer(data); // fixme
 
@@ -457,7 +457,7 @@ pub extern "C" fn proxmox_backup_close_image(
     dev_id: u8,
     error: * mut * mut c_char,
 ) -> c_int {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
 
     let mut result: c_int = -1;
 
@@ -488,7 +488,7 @@ pub extern "C" fn proxmox_backup_close_image_async(
     result: *mut c_int,
     error: * mut * mut c_char,
 ) {
-    let task = handle_to_task(handle);
+    let task = backup_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
 
     task.runtime().spawn(async move {
