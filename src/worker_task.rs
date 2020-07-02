@@ -16,13 +16,12 @@ pub(crate) struct BackupTask {
     setup: BackupSetup,
     runtime: tokio::runtime::Runtime,
     crypt_config: Option<Arc<CryptConfig>>,
-    writer: Option<Arc<BackupWriter>>,
-    last_manifest: Option<Arc<BackupManifest>>,
+    writer: Mutex<Option<Arc<BackupWriter>>>,
+    last_manifest: Mutex<Option<Arc<BackupManifest>>>,
     registry: Arc<Mutex<ImageRegistry>>, // fixme Arc/Mutex???
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     abort: tokio::sync::broadcast::Sender<()>,
-    aborted: Option<String>,  // set on abort, conatins abort reason
-    written_bytes: u64,
+    aborted: Mutex<Option<String>>,  // set on abort, conatins abort reason
 }
 
 impl BackupTask {
@@ -57,8 +56,8 @@ impl BackupTask {
         let known_chunks = Arc::new(Mutex::new(HashSet::new()));
 
         Ok(Self { runtime, setup, crypt_config, abort, registry, known_chunks,
-                  writer: None, written_bytes: 0,
-                  last_manifest: None, aborted: None })
+                  writer: Mutex::new(None), last_manifest: Mutex::new(None),
+                  aborted: Mutex::new(None) })
     }
 
     pub fn runtime(&self) -> tokio::runtime::Handle {
@@ -66,55 +65,59 @@ impl BackupTask {
     }
 
     fn check_aborted(&self) -> Result<(), Error> {
-        if self.aborted.is_some() {
+        if (*self.aborted.lock().unwrap()).is_some() {
             bail!("task already aborted");
         }
         Ok(())
     }
 
-    pub fn abort(&mut self, reason: String) {
+    pub fn abort(&self, reason: String) {
         let _ = self.abort.send(()); // fixme: ignore errors?
-        if self.aborted.is_none() {
-            self.aborted = Some(reason);
+        let mut aborted = self.aborted.lock().unwrap();
+        if (*aborted).is_none() {
+            *aborted = Some(reason);
         }
     }
 
-    async fn _connect(&mut self) -> Result<c_int, Error> {
-
-        let options = HttpClientOptions::new()
-            .fingerprint(self.setup.fingerprint.clone())
-            .password(self.setup.password.clone());
-
-        let http = HttpClient::new(&self.setup.host, &self.setup.user, options)?;
-        let writer = BackupWriter::start(http, self.crypt_config.clone(), &self.setup.store, "vm", &self.setup.backup_id, self.setup.backup_time, false).await?;
-
-        let last_manifest = writer.download_previous_manifest().await;
-        if let Ok(last_manifest) = last_manifest {
-            self.last_manifest = Some(Arc::new(last_manifest));
-        }
-
-        self.writer = Some(writer);
-
-        Ok(if self.last_manifest.is_some() { 1 } else { 0 })
-    }
-
-    pub async fn connect(&mut self) -> Result<c_int, Error> {
+    pub async fn connect(&self) -> Result<c_int, Error> {
 
         self.check_aborted()?;
 
+        let command_future = async  {
+            let options = HttpClientOptions::new()
+                .fingerprint(self.setup.fingerprint.clone())
+                .password(self.setup.password.clone());
+
+            let http = HttpClient::new(&self.setup.host, &self.setup.user, options)?;
+            let writer = BackupWriter::start(
+                http, self.crypt_config.clone(), &self.setup.store, "vm", &self.setup.backup_id,
+                self.setup.backup_time, false).await?;
+
+            let last_manifest = writer.download_previous_manifest().await;
+            let mut result = 0;
+            if let Ok(last_manifest) = last_manifest {
+                result = 1;
+                *self.last_manifest.lock().unwrap() = Some(Arc::new(last_manifest));
+            }
+
+            *self.writer.lock().unwrap() = Some(writer);
+
+            Ok(result)
+        };
+
         let mut abort_rx = self.abort.subscribe();
-        abortable_command(Self::_connect(self), abort_rx.recv()).await
+        abortable_command(command_future, abort_rx.recv()).await
     }
 
     pub async fn add_config(
-        &mut self,
+        &self,
         name: String,
         data: Vec<u8>,
     ) -> Result<c_int, Error> {
 
         self.check_aborted()?;
 
-        let writer = match self.writer {
+        let writer = match *self.writer.lock().unwrap() {
             Some(ref writer) => writer.clone(),
             None => bail!("not connected"),
         };
@@ -130,7 +133,7 @@ impl BackupTask {
     }
 
     pub async fn write_data(
-        &mut self,
+        &self,
         dev_id: u8,
         data: DataPointer, // this may be null
         offset: u64,
@@ -139,12 +142,10 @@ impl BackupTask {
 
         self.check_aborted()?;
 
-        let writer = match self.writer {
+        let writer = match *self.writer.lock().unwrap() {
             Some(ref writer) => writer.clone(),
             None => bail!("not connected"),
         };
-
-        self.written_bytes += size;
 
         let command_future = write_data(
             writer,
@@ -163,7 +164,7 @@ impl BackupTask {
     }
 
     pub async fn register_image(
-        &mut self,
+        &self,
         device_name: String,
         size: u64,
         incremental: bool,
@@ -171,7 +172,7 @@ impl BackupTask {
 
         self.check_aborted()?;
 
-        let writer = match self.writer {
+        let writer = match *self.writer.lock().unwrap() {
             Some(ref writer) => writer.clone(),
             None => bail!("not connected"),
         };
@@ -179,7 +180,7 @@ impl BackupTask {
         let command_future = register_image(
             writer,
             self.crypt_config.clone(),
-            self.last_manifest.clone(),
+            self.last_manifest.lock().unwrap().clone(),
             self.registry.clone(),
             self.known_chunks.clone(),
             device_name,
@@ -192,14 +193,11 @@ impl BackupTask {
         abortable_command(command_future, abort_rx.recv()).await
     }
 
-    pub async fn close_image(
-        &mut self,
-        dev_id: u8,
-    ) -> Result<c_int, Error> {
+    pub async fn close_image(&self, dev_id: u8) -> Result<c_int, Error> {
 
         self.check_aborted()?;
 
-        let writer = match self.writer {
+        let writer = match *self.writer.lock().unwrap() {
             Some(ref writer) => writer.clone(),
             None => bail!("not connected"),
         };
@@ -209,13 +207,11 @@ impl BackupTask {
         abortable_command(command_future, abort_rx.recv()).await
     }
 
-    pub async fn finish(
-        &mut self,
-    ) -> Result<c_int, Error> {
+    pub async fn finish(&self) -> Result<c_int, Error> {
 
         self.check_aborted()?;
 
-        let writer = match self.writer {
+        let writer = match *self.writer.lock().unwrap() {
             Some(ref writer) => writer.clone(),
             None => bail!("not connected"),
         };
