@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.3.1-1) unstable; urgency=medium
+
+  * write_data: return 0 for reused chunks
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 02 Jul 2020 12:06:31 +0200
+
 proxmox-backup-qemu (0.3.0-1) unstable; urgency=medium
 
   * make backup C api thread safe
