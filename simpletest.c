@@ -86,5 +86,47 @@ void main(int argc, char **argv) {
   proxmox_backup_disconnect(pbs);
 
   printf("Done\n");
+
+  {
+    printf("Starting restore test\n");
+
+    ProxmoxRestoreHandle *pbs = proxmox_restore_new
+      (repository, "vm", backup_id, backup_time, password, NULL, NULL, fingerprint, &pbs_error);
+
+    printf("connect\n");
+    if (proxmox_restore_connect(pbs, &pbs_error) < 0) {
+      fprintf(stderr, "proxmox_restore_connect failed - %s\n", pbs_error);
+      proxmox_backup_free_error(pbs_error);
+      exit(-1);
+    }
+
+    printf("open_image\n");
+    int dev_id = proxmox_restore_open_image(pbs, "scsi-drive0.img.fidx", &pbs_error); // fixme: name?
+    if (dev_id < 0) {
+      fprintf(stderr, "proxmox_restore_open_image failed - %s\n", pbs_error);
+      proxmox_backup_free_error(pbs_error);
+      exit(-1);
+    }
+
+    uint8_t buffer[1024*1024];
+
+    uint64_t offset = 0;
+
+    for (;;) {
+      int bytes = proxmox_restore_read_image_at(pbs, dev_id, buffer, offset, sizeof(buffer), &pbs_error);
+      if (bytes < 0) {
+	fprintf(stderr, "proxmox_restore_read_image_at failed - %s\n", pbs_error);
+	proxmox_backup_free_error(pbs_error);
+	exit(-1);
+      }
+      if (bytes == 0) // EOF
+	break;
+
+      printf("Got %d bytes at offset %ld\n", bytes, offset);
+      offset += bytes;
+    }
+
+  }
+
   exit(0);
 }

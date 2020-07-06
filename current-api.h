@@ -241,17 +241,26 @@ void proxmox_backup_write_data_async(ProxmoxBackupHandle *handle,
                                      char **error);
 
 /**
- * Connect the the backup server for restore
+ * Open connection to the backup server (sync)
  *
- * Note: This implementation is not async
+ * Returns:
+ *  0 ... Sucecss (no prevbious backup)
+ * -1 ... Error
  */
-ProxmoxRestoreHandle *proxmox_restore_connect(const char *repo,
-                                              const char *snapshot,
-                                              const char *password,
-                                              const char *keyfile,
-                                              const char *key_password,
-                                              const char *fingerprint,
-                                              char **error);
+int proxmox_restore_connect(ProxmoxRestoreHandle *handle, char **error);
+
+/**
+ * Open connection to the backup server (async)
+ *
+ * Returns:
+ *  0 ... Sucecss (no prevbious backup)
+ * -1 ... Error
+ */
+void proxmox_restore_connect_async(ProxmoxRestoreHandle *handle,
+                                   void (*callback)(void*),
+                                   void *callback_data,
+                                   int *result,
+                                   char **error);
 
 /**
  * Disconnect and free allocated memory
@@ -261,7 +270,12 @@ ProxmoxRestoreHandle *proxmox_restore_connect(const char *repo,
 void proxmox_restore_disconnect(ProxmoxRestoreHandle *handle);
 
 /**
- * Restore an image
+ * Retrieve the length of a given archive handle in bytes
+ */
+long proxmox_restore_get_image_length(ProxmoxRestoreHandle *handle, uint8_t aid, char **error);
+
+/**
+ * Restore an image (sync)
  *
  * Image data is downloaded and sequentially dumped to the callback.
  */
@@ -271,5 +285,75 @@ int proxmox_restore_image(ProxmoxRestoreHandle *handle,
                           void *callback_data,
                           char **error,
                           bool verbose);
+
+/**
+ * Connect the the backup server for restore (sync)
+ */
+ProxmoxRestoreHandle *proxmox_restore_new(const char *repo,
+                                          const char *backup_type,
+                                          const char *backup_id,
+                                          uint64_t backup_time,
+                                          const char *password,
+                                          const char *keyfile,
+                                          const char *key_password,
+                                          const char *fingerprint,
+                                          char **error);
+
+/**
+ * Retrieve the ID of a handle used to access data in the given archive (sync)
+ */
+int proxmox_restore_open_image(ProxmoxRestoreHandle *handle,
+                               const char *archive_name,
+                               char **error);
+
+/**
+ * Retrieve the ID of a handle used to access data in the given archive (async)
+ */
+void proxmox_restore_open_image_async(ProxmoxRestoreHandle *handle,
+                                      const char *archive_name,
+                                      void (*callback)(void*),
+                                      void *callback_data,
+                                      int *result,
+                                      char **error);
+
+/**
+ * Read data from the backup image at the given offset (sync)
+ *
+ * Reads up to size bytes from handle aid at offset. On success,
+ * returns the number of bytes read. (a return of zero indicates end
+ * of file).
+ *
+ * Note: It is not an error for a successful call to transfer fewer
+ * bytes than requested.
+ */
+int proxmox_restore_read_image_at(ProxmoxRestoreHandle *handle,
+                                  uint8_t aid,
+                                  uint8_t *data,
+                                  uint64_t offset,
+                                  uint64_t size,
+                                  char **error);
+
+/**
+ * Read data from the backup image at the given offset (async)
+ *
+ * Reads up to size bytes from handle aid at offset. On success,
+ * returns the number of bytes read. (a return of zero indicates end
+ * of file).
+ *
+ * Note: The data pointer needs to be valid until the async
+ * opteration is finished.
+ *
+ * Note: It is not an error for a successful call to transfer fewer
+ * bytes than requested.
+ */
+void proxmox_restore_read_image_at_async(ProxmoxRestoreHandle *handle,
+                                         uint8_t aid,
+                                         uint8_t *data,
+                                         uint64_t offset,
+                                         uint64_t size,
+                                         void (*callback)(void*),
+                                         void *callback_data,
+                                         int *result,
+                                         char **error);
 
 #endif /* PROXMOX_BACKUP_QEMU_H */

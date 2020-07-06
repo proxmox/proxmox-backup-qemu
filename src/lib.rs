@@ -1,12 +1,11 @@
-use anyhow::{bail, format_err, Error};
+use anyhow::{format_err, Error};
 use std::ffi::CString;
 use std::ptr;
-use std::os::raw::{c_uchar, c_char, c_int, c_void};
+use std::os::raw::{c_uchar, c_char, c_int, c_void, c_long};
 use std::sync::{Arc, Mutex, Condvar};
 
 use proxmox::try_block;
 use proxmox_backup::client::BackupRepository;
-use proxmox_backup::backup::BackupDir;
 use chrono::{DateTime, Utc, TimeZone};
 
 mod capi_types;
@@ -62,7 +61,7 @@ macro_rules! raise_error_int {
     ($error:ident, $err:expr) => {{
         let errmsg = convert_error_to_cstring($err.to_string());
         unsafe { *$error =  errmsg.into_raw(); }
-        return -1 as c_int;
+        return -1;
     }}
 }
 
@@ -72,6 +71,7 @@ pub(crate) struct BackupSetup {
     pub store: String,
     pub user: String,
     pub chunk_size: u64,
+    pub backup_type: String,
     pub backup_id: String,
     pub backup_time: DateTime<Utc>,
     pub password: Option<String>,
@@ -169,6 +169,7 @@ pub extern "C" fn proxmox_backup_new(
             user: repo.user().to_owned(),
             store: repo.store().to_owned(),
             chunk_size: if chunk_size > 0 { chunk_size } else { PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE },
+            backup_type: String::from("vm"),
             backup_id,
             password,
             backup_time,
@@ -569,7 +570,9 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
     unsafe { Box::from_raw(task) }; // take ownership, drop(task)
 }
 
-// Simple interface to restore images
+// Simple interface to restore data
+//
+// currently only implemented for images...
 
 fn restore_handle_to_conn(handle: *mut ProxmoxRestoreHandle) -> Arc<ProxmoxRestore> {
     let conn = unsafe { & *(handle as *const Arc<ProxmoxRestore>) };
@@ -577,14 +580,14 @@ fn restore_handle_to_conn(handle: *mut ProxmoxRestoreHandle) -> Arc<ProxmoxResto
     conn.clone()
 }
 
-/// Connect the the backup server for restore
-///
-/// Note: This implementation is not async
+/// Connect the the backup server for restore (sync)
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn proxmox_restore_connect(
+pub extern "C" fn proxmox_restore_new(
     repo: *const c_char,
-    snapshot: *const c_char,
+    backup_type: *const c_char,
+    backup_id: *const c_char,
+    backup_time: u64,
     password: *const c_char,
     keyfile: *const c_char,
     key_password: *const c_char,
@@ -597,17 +600,13 @@ pub extern "C" fn proxmox_restore_connect(
             .ok_or_else(|| format_err!("repo must not be NULL"))?
             .parse()?;
 
-        let snapshot: BackupDir = tools::utf8_c_string_lossy(snapshot)
-            .ok_or_else(|| format_err!("snapshot must not be NULL"))?
-            .parse()?;
+        let backup_type: String = tools::utf8_c_string_lossy(backup_type)
+            .ok_or_else(|| format_err!("backup_type must not be NULL"))?;
 
-        let backup_type = snapshot.group().backup_type();
-        let backup_id = snapshot.group().backup_id().to_owned();
-        let backup_time = snapshot.backup_time();
+        let backup_id: String = tools::utf8_c_string_lossy(backup_id)
+            .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
 
-        if backup_type != "vm" {
-            bail!("wrong backup type ({} != vm)", backup_type);
-        }
+        let backup_time = Utc.timestamp(backup_time as i64, 0);
 
         let password = tools::utf8_c_string(password)?;
         let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
@@ -619,6 +618,7 @@ pub extern "C" fn proxmox_restore_connect(
             user: repo.user().to_owned(),
             store: repo.store().to_owned(),
             chunk_size: PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, // not used by restore
+            backup_type,
             backup_id,
             password,
             backup_time,
@@ -639,6 +639,57 @@ pub extern "C" fn proxmox_restore_connect(
     }
 }
 
+/// Open connection to the backup server (sync)
+///
+/// Returns:
+///  0 ... Sucecss (no prevbious backup)
+/// -1 ... Error
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_restore_connect(
+    handle: *mut ProxmoxRestoreHandle,
+    error: *mut *mut c_char,
+) -> c_int {
+    let conn = restore_handle_to_conn(handle);
+
+    let mut result: c_int = -1;
+
+    let mut got_result_condition = GotResultCondition::new();
+
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+
+    conn.runtime().spawn(async move {
+        let result = conn.connect().await;
+        callback_info.send_result(result);
+    });
+
+    got_result_condition.wait();
+
+    return result;
+}
+/// Open connection to the backup server (async)
+///
+/// Returns:
+///  0 ... Sucecss (no prevbious backup)
+/// -1 ... Error
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_restore_connect_async(
+    handle: *mut ProxmoxRestoreHandle,
+    callback: extern "C" fn(*mut c_void),
+    callback_data: *mut c_void,
+    result: *mut c_int,
+    error: *mut *mut c_char,
+) {
+    let conn = restore_handle_to_conn(handle);
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
+
+    conn.runtime().spawn(async move {
+        let result = conn.connect().await;
+        callback_info.send_result(result);
+    });
+}
+
 /// Disconnect and free allocated memory
 ///
 /// The handle becomes invalid after this call.
@@ -650,7 +701,7 @@ pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) 
     unsafe { Box::from_raw(conn) }; //drop(conn)
 }
 
-/// Restore an image
+/// Restore an image (sync)
 ///
 /// Image data is downloaded and sequentially dumped to the callback.
 #[no_mangle]
@@ -679,7 +730,9 @@ pub extern "C" fn proxmox_restore_image(
             callback(callback_data, offset, std::ptr::null(), len)
         };
 
-        conn.restore(archive_name, write_data_callback, write_zero_callback, verbose)?;
+        proxmox_backup::tools::runtime::block_on(
+            conn.restore_image(archive_name, write_data_callback, write_zero_callback, verbose)
+        )?;
 
         Ok(())
     });
@@ -689,4 +742,146 @@ pub extern "C" fn proxmox_restore_image(
     };
 
     0
+}
+
+/// Retrieve the ID of a handle used to access data in the given archive (sync)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_restore_open_image(
+    handle: *mut ProxmoxRestoreHandle,
+    archive_name: *const c_char,
+    error: * mut * mut c_char,
+) -> c_int {
+    let conn = restore_handle_to_conn(handle);
+
+    let mut result: c_int = -1;
+    let mut got_result_condition = GotResultCondition::new();
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+
+    let archive_name = unsafe { tools::utf8_c_string_lossy_non_null(archive_name) };
+
+    conn.runtime().spawn(async move {
+        let result = match conn.open_image(archive_name).await {
+            Ok(res) => Ok(res as i32),
+            Err(err) => Err(err)
+        };
+        callback_info.send_result(result);
+    });
+
+    got_result_condition.wait();
+
+    return result;
+}
+
+/// Retrieve the ID of a handle used to access data in the given archive (async)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_restore_open_image_async(
+    handle: *mut ProxmoxRestoreHandle,
+    archive_name: *const c_char,
+    callback: extern "C" fn(*mut c_void),
+    callback_data: *mut c_void,
+    result: *mut c_int,
+    error: * mut * mut c_char,
+) {
+    let conn = restore_handle_to_conn(handle);
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let archive_name = unsafe { tools::utf8_c_string_lossy_non_null(archive_name) };
+
+    conn.runtime().spawn(async move {
+        let result = match conn.open_image(archive_name).await {
+            Ok(res) => Ok(res as i32),
+            Err(err) => Err(err)
+        };
+        callback_info.send_result(result);
+    });
+}
+
+/// Retrieve the length of a given archive handle in bytes
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_restore_get_image_length(
+    handle: *mut ProxmoxRestoreHandle,
+    aid: u8,
+    error: * mut * mut c_char,
+) -> c_long {
+    let conn = restore_handle_to_conn(handle);
+    let result = conn.get_image_length(aid);
+    match result {
+        Ok(res) => res as i64,
+        Err(err) => raise_error_int!(error, err),
+    }
+}
+
+/// Read data from the backup image at the given offset (sync)
+///
+/// Reads up to size bytes from handle aid at offset. On success,
+/// returns the number of bytes read. (a return of zero indicates end
+/// of file).
+///
+/// Note: It is not an error for a successful call to transfer fewer
+/// bytes than requested.
+#[no_mangle]
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_restore_read_image_at(
+    handle: *mut ProxmoxRestoreHandle,
+    aid: u8,
+    data: *mut u8,
+    offset: u64,
+    size: u64,
+    error: * mut * mut c_char,
+) -> c_int {
+    let conn = restore_handle_to_conn(handle);
+
+    let mut result: c_int = -1;
+
+    let mut got_result_condition = GotResultCondition::new();
+
+    let callback_info = got_result_condition.callback_info(&mut result, error);
+    let data = DataPointer(data);
+
+    conn.runtime().spawn(async move {
+        let result = conn.read_image_at(aid, data, offset, size).await;
+        callback_info.send_result(result);
+    });
+
+    got_result_condition.wait();
+
+    return result;
+}
+
+/// Read data from the backup image at the given offset (async)
+///
+/// Reads up to size bytes from handle aid at offset. On success,
+/// returns the number of bytes read. (a return of zero indicates end
+/// of file).
+///
+/// Note: The data pointer needs to be valid until the async
+/// opteration is finished.
+///
+/// Note: It is not an error for a successful call to transfer fewer
+/// bytes than requested.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_restore_read_image_at_async(
+    handle: *mut ProxmoxRestoreHandle,
+    aid: u8,
+    data: *mut u8,
+    offset: u64,
+    size: u64,
+    callback: extern "C" fn(*mut c_void),
+    callback_data: *mut c_void,
+    result: *mut c_int,
+    error: * mut * mut c_char,
+) {
+    let conn = restore_handle_to_conn(handle);
+
+    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let data = DataPointer(data);
+
+    conn.runtime().spawn(async move {
+        let result = conn.read_image_at(aid, data, offset, size).await;
+        callback_info.send_result(result);
+    });
 }
