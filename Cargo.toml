@@ -28,4 +28,5 @@ tokio = { version = "0.2.9", features = [ "blocking", "fs", "io-util", "macros",
 openssl = "0.10"
 h2 = { version = "0.2", features = ["stream"] }
 lazy_static = "1.4"
+once_cell = "1.3.1"
 
