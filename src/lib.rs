@@ -300,6 +300,25 @@ pub extern "C" fn proxmox_backup_abort(
     task.abort(reason);
 }
 
+/// Check if we can do incremental backups.
+///
+/// This method compares the csum from last backup manifest with the
+/// checksum stored locally.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_check_incremental(
+    handle: *mut ProxmoxBackupHandle,
+    device_name: *const c_char, // expect utf8 here
+    size: u64,
+) -> c_int {
+    let task = backup_handle_to_task(handle);
+
+    if device_name.is_null() { return 0; }
+
+    let device_name = unsafe { tools::utf8_c_string_lossy_non_null(device_name) };
+
+    if task.check_incremental(device_name, size) { 1 } else { 0 }
+}
 
 /// Register a backup image (sync)
 #[no_mangle]

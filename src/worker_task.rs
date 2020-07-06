@@ -166,6 +166,14 @@ impl BackupTask {
         abortable_command(command_future, abort_rx.recv()).await
     }
 
+    pub fn check_incremental(
+        &self,
+        device_name: String,
+        size: u64,
+    ) -> bool {
+        check_last_incremental_csum(self.last_manifest.lock().unwrap().clone(), device_name, size)
+    }
+
     pub async fn register_image(
         &self,
         device_name: String,
