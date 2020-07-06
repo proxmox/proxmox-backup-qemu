@@ -1,3 +1,13 @@
+proxmox-backup-qemu (0.3.2-1) unstable; urgency=medium
+
+  * make Registry generic and add ImageAccessInfo
+
+  * add restore data reading API
+
+  * add api to check if backup can be done incrementally
+
+ -- Proxmox Support Team <support@proxmox.com>  Mon, 06 Jul 2020 19:54:13 +0200
+
 proxmox-backup-qemu (0.3.1-1) unstable; urgency=medium
 
   * write_data: return 0 for reused chunks
