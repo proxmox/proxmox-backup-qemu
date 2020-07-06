@@ -195,6 +195,17 @@ void proxmox_backup_register_image_async(ProxmoxBackupHandle *handle,
                                          char **error);
 
 /**
+ * Returns the text presentation (relative path) for a backup snapshot
+ *
+ * The resturned value is allocated with strdup(), and can be freed
+ * with free().
+ */
+const char *proxmox_backup_snapshot_string(const char *backup_type,
+                                           const char *backup_id,
+                                           int64_t backup_time,
+                                           char **error);
+
+/**
  * Write data to into a registered image (sync)
  *
  * Upload a chunk of data for the <dev_id> image.
@@ -290,9 +301,7 @@ int proxmox_restore_image(ProxmoxRestoreHandle *handle,
  * Connect the the backup server for restore (sync)
  */
 ProxmoxRestoreHandle *proxmox_restore_new(const char *repo,
-                                          const char *backup_type,
-                                          const char *backup_id,
-                                          uint64_t backup_time,
+                                          const char *snapshot,
                                           const char *password,
                                           const char *keyfile,
                                           const char *key_password,
