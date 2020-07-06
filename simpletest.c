@@ -90,8 +90,15 @@ void main(int argc, char **argv) {
   {
     printf("Starting restore test\n");
 
+    const char *snapshot = proxmox_backup_snapshot_string("vm", backup_id, backup_time, &pbs_error);
+    if (snapshot == NULL) {
+      fprintf(stderr, "proxmox_backup_snapshot_string failed - %s\n", pbs_error);
+      proxmox_backup_free_error(pbs_error);
+      exit(-1);
+    }
+
     ProxmoxRestoreHandle *pbs = proxmox_restore_new
-      (repository, "vm", backup_id, backup_time, password, NULL, NULL, fingerprint, &pbs_error);
+      (repository, snapshot, password, NULL, NULL, fingerprint, &pbs_error);
 
     printf("connect\n");
     if (proxmox_restore_connect(pbs, &pbs_error) < 0) {

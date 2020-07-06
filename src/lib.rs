@@ -5,6 +5,7 @@ use std::os::raw::{c_uchar, c_char, c_int, c_void, c_long};
 use std::sync::{Arc, Mutex, Condvar};
 
 use proxmox::try_block;
+use proxmox_backup::backup::BackupDir;
 use proxmox_backup::client::BackupRepository;
 use chrono::{DateTime, Utc, TimeZone};
 
@@ -64,6 +65,39 @@ macro_rules! raise_error_int {
         return -1;
     }}
 }
+
+/// Returns the text presentation (relative path) for a backup snapshot
+///
+/// The resturned value is allocated with strdup(), and can be freed
+/// with free().
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_snapshot_string(
+    backup_type: *const c_char,
+    backup_id: *const c_char,
+    backup_time: i64,
+    error: * mut * mut c_char,
+) -> *const c_char {
+
+    let snapshot: Result<CString, Error> = try_block!({
+        let backup_type: String = tools::utf8_c_string_lossy(backup_type)
+            .ok_or_else(|| format_err!("backup_type must not be NULL"))?;
+        let backup_id: String = tools::utf8_c_string_lossy(backup_id)
+            .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
+
+        let snapshot = BackupDir::new(backup_type, backup_id, backup_time);
+
+        Ok(CString::new(format!("{}", snapshot))?)
+    });
+
+    match snapshot {
+        Ok(snapshot) => {
+            unsafe { libc::strdup(snapshot.as_ptr()) }
+        }
+        Err(err) => raise_error_null!(error, err),
+    }
+}
+
 
 #[derive(Clone)]
 pub(crate) struct BackupSetup {
@@ -585,9 +619,7 @@ fn restore_handle_to_conn(handle: *mut ProxmoxRestoreHandle) -> Arc<ProxmoxResto
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_new(
     repo: *const c_char,
-    backup_type: *const c_char,
-    backup_id: *const c_char,
-    backup_time: u64,
+    snapshot: *const c_char,
     password: *const c_char,
     keyfile: *const c_char,
     key_password: *const c_char,
@@ -600,13 +632,13 @@ pub extern "C" fn proxmox_restore_new(
             .ok_or_else(|| format_err!("repo must not be NULL"))?
             .parse()?;
 
-        let backup_type: String = tools::utf8_c_string_lossy(backup_type)
-            .ok_or_else(|| format_err!("backup_type must not be NULL"))?;
+        let snapshot: BackupDir = tools::utf8_c_string_lossy(snapshot)
+            .ok_or_else(|| format_err!("snapshot must not be NULL"))?
+            .parse()?;
 
-        let backup_id: String = tools::utf8_c_string_lossy(backup_id)
-            .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
-
-        let backup_time = Utc.timestamp(backup_time as i64, 0);
+        let backup_type = snapshot.group().backup_type().to_owned();
+        let backup_id = snapshot.group().backup_id().to_owned();
+        let backup_time = snapshot.backup_time();
 
         let password = tools::utf8_c_string(password)?;
         let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
