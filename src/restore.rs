@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::convert::TryInto;
 
-use anyhow::{bail, Error};
+use anyhow::{format_err, bail, Error};
+use once_cell::sync::OnceCell;
 
 use proxmox_backup::tools::runtime::{get_runtime, block_in_place};
 use proxmox_backup::backup::*;
@@ -23,8 +24,8 @@ pub(crate) struct ProxmoxRestore {
     setup: BackupSetup,
     runtime: Arc<tokio::runtime::Runtime>,
     pub crypt_config: Option<Arc<CryptConfig>>,
-    pub client: Mutex<Option<Arc<BackupReader>>>,
-    pub manifest: Mutex<Option<Arc<BackupManifest>>>,
+    pub client: OnceCell<Arc<BackupReader>>,
+    pub manifest: OnceCell<Arc<BackupManifest>>,
     pub image_registry: Arc<Mutex<Registry<ImageAccessInfo>>>,
 }
 
@@ -49,13 +50,12 @@ impl ProxmoxRestore {
             }
         };
 
-
         Ok(Self {
             setup,
             runtime,
             crypt_config,
-            client: Mutex::new(None),
-            manifest: Mutex::new(None),
+            client: OnceCell::new(),
+            manifest: OnceCell::new(),
             image_registry: Arc::new(Mutex::new(Registry::<ImageAccessInfo>::new())),
         })
     }
@@ -79,8 +79,11 @@ impl ProxmoxRestore {
 
         let manifest = client.download_manifest().await?;
 
-        *self.manifest.lock().unwrap() = Some(Arc::new(manifest));
-        *self.client.lock().unwrap() = Some(client);
+        self.manifest.set(Arc::new(manifest))
+            .map_err(|_| format_err!("already connected!"))?;
+
+        self.client.set(client)
+            .map_err(|_| format_err!("already connected!"))?;
 
         Ok(0)
     }
@@ -101,13 +104,13 @@ impl ProxmoxRestore {
             eprintln!("download and verify backup index");
         }
 
-        let client = match *self.client.lock().unwrap() {
-            Some(ref reader) => reader.clone(),
+        let client = match self.client.get() {
+            Some(reader) => reader.clone(),
             None => bail!("not connected"),
         };
 
-        let manifest = match *self.manifest.lock().unwrap() {
-            Some(ref manifest) => manifest.clone(),
+        let manifest = match self.manifest.get() {
+            Some(manifest) => manifest.clone(),
             None => bail!("no manifest"),
         };
 
@@ -185,13 +188,13 @@ impl ProxmoxRestore {
         archive_name: String,
     ) -> Result<u8, Error> {
 
-        let client = match *self.client.lock().unwrap() {
-            Some(ref reader) => reader.clone(),
+        let client = match self.client.get() {
+            Some(reader) => reader.clone(),
             None => bail!("not connected"),
         };
 
-        let manifest = match *self.manifest.lock().unwrap() {
-            Some(ref manifest) => manifest.clone(),
+        let manifest = match self.manifest.get() {
+            Some(manifest) => manifest.clone(),
             None => bail!("no manifest"),
         };
 
