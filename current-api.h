@@ -81,6 +81,16 @@ void proxmox_backup_add_config_async(ProxmoxBackupHandle *handle,
                                      char **error);
 
 /**
+ * Check if we can do incremental backups.
+ *
+ * This method compares the csum from last backup manifest with the
+ * checksum stored locally.
+ */
+int proxmox_backup_check_incremental(ProxmoxBackupHandle *handle,
+                                     const char *device_name,
+                                     uint64_t size);
+
+/**
  * Close a registered image (sync)
  */
 int proxmox_backup_close_image(ProxmoxBackupHandle *handle, uint8_t dev_id, char **error);
