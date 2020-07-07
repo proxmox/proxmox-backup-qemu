@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.4.0-1) unstable; urgency=medium
+
+  * use new get_runtime_with_builder
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 07 Jul 2020 10:59:55 +0200
+
 proxmox-backup-qemu (0.3.3-1) unstable; urgency=medium
 
   * code cleanups
