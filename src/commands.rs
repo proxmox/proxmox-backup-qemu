@@ -223,15 +223,11 @@ pub(crate) async fn close_image(
 
     let _value = client.post("fixed_close", Some(param)).await?;
 
-    {
-        let mut reg_guard = registry.lock().unwrap();
-        let info = reg_guard.lookup(dev_id)?;
-        let mut prev_csum_guard = PREVIOUS_CSUMS.lock().unwrap();
-
-        prev_csum_guard.insert(info.device_name.clone(), proxmox::tools::hex_to_digest(&csum).unwrap());
-    }
-
     let mut guard = registry.lock().unwrap();
+    let info = guard.lookup(dev_id)?;
+    let mut prev_csum_guard = PREVIOUS_CSUMS.lock().unwrap();
+    prev_csum_guard.insert(info.device_name.clone(), proxmox::tools::hex_to_digest(&csum).unwrap());
+
     guard.add_file_info(json!({
         "filename": format!("{}.img.fidx", device_name),
         "size": device_size,
