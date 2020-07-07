@@ -5,7 +5,9 @@ use once_cell::sync::OnceCell;
 use std::os::raw::c_int;
 
 use futures::future::{Future, Either, FutureExt};
+use tokio::runtime::Runtime;
 
+use proxmox_backup::tools::runtime::get_runtime_with_builder;
 use proxmox_backup::backup::{CryptConfig, BackupManifest, load_and_decrypt_key};
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupWriter};
 
@@ -16,7 +18,7 @@ use crate::commands::*;
 
 pub(crate) struct BackupTask {
     setup: BackupSetup,
-    runtime: tokio::runtime::Runtime,
+    runtime: Arc<Runtime>,
     crypt_config: Option<Arc<CryptConfig>>,
     writer: OnceCell<Arc<BackupWriter>>,
     last_manifest: OnceCell<Arc<BackupManifest>>,
@@ -28,16 +30,11 @@ pub(crate) struct BackupTask {
 
 impl BackupTask {
 
-    pub fn new(setup: BackupSetup) -> Result<Self, Error> {
-
-        let mut builder = tokio::runtime::Builder::new();
-        builder.threaded_scheduler();
-        builder.enable_all();
-        builder.max_threads(6);
-        builder.core_threads(4);
-        builder.thread_name("proxmox-backup-qemu-worker");
-
-        let runtime = builder.build()?;
+    /// Create a new instance, using the specified Runtime
+    ///
+    /// We keep a reference to the runtime - else the runtime can be
+    /// dropped and further connections fails.
+    pub fn with_runtime(setup: BackupSetup, runtime: Arc<Runtime>) -> Result<Self, Error> {
 
         let crypt_config = match setup.keyfile {
             None => None,
@@ -60,6 +57,19 @@ impl BackupTask {
         Ok(Self { runtime, setup, crypt_config, abort, registry, known_chunks,
                   writer: OnceCell::new(), last_manifest: OnceCell::new(),
                   aborted: OnceCell::new() })
+    }
+
+    pub fn new(setup: BackupSetup) -> Result<Self, Error> {
+        let runtime = get_runtime_with_builder(|| {
+            let mut builder = tokio::runtime::Builder::new();
+            builder.threaded_scheduler();
+            builder.enable_all();
+            builder.max_threads(6);
+            builder.core_threads(4);
+            builder.thread_name("proxmox-backup-worker");
+            builder
+        });
+        Self::with_runtime(setup, runtime)
     }
 
     pub fn runtime(&self) -> tokio::runtime::Handle {

@@ -7,7 +7,7 @@ use anyhow::{format_err, bail, Error};
 use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
 
-use proxmox_backup::tools::runtime::{get_runtime, block_in_place};
+use proxmox_backup::tools::runtime::{get_runtime_with_builder, block_in_place};
 use proxmox_backup::backup::*;
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
 
@@ -64,7 +64,15 @@ impl RestoreTask {
     }
 
     pub fn new(setup: BackupSetup) -> Result<Self, Error> {
-        let runtime = get_runtime();
+        let runtime = get_runtime_with_builder(|| {
+            let mut builder = tokio::runtime::Builder::new();
+            builder.threaded_scheduler();
+            builder.enable_all();
+            builder.max_threads(6);
+            builder.core_threads(4);
+            builder.thread_name("proxmox-restore-worker");
+            builder
+        });
         Self::with_runtime(setup, runtime)
     }
 
