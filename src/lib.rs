@@ -13,11 +13,10 @@ mod capi_types;
 use capi_types::*;
 
 mod upload_queue;
-
 mod commands;
 
-mod worker_task;
-use worker_task::*;
+mod backup;
+use backup::*;
 
 mod restore;
 use restore::*;
