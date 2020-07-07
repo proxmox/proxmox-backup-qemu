@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.3.3-1) unstable; urgency=medium
+
+  * code cleanups
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 07 Jul 2020 09:49:13 +0200
+
 proxmox-backup-qemu (0.3.2-1) unstable; urgency=medium
 
   * make Registry generic and add ImageAccessInfo
