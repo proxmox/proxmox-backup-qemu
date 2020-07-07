@@ -627,10 +627,10 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 //
 // currently only implemented for images...
 
-fn restore_handle_to_conn(handle: *mut ProxmoxRestoreHandle) -> Arc<ProxmoxRestore> {
-    let conn = unsafe { & *(handle as *const Arc<ProxmoxRestore>) };
+fn restore_handle_to_task(handle: *mut ProxmoxRestoreHandle) -> Arc<RestoreTask> {
+    let restore_task = unsafe { & *(handle as *const Arc<RestoreTask>) };
     // increase reference count while we use it inside rust
-    conn.clone()
+    restore_task.clone()
 }
 
 /// Connect the the backup server for restore (sync)
@@ -678,13 +678,13 @@ pub extern "C" fn proxmox_restore_new(
             fingerprint,
         };
 
-        ProxmoxRestore::new(setup)
+        RestoreTask::new(setup)
     });
 
     match result {
-        Ok(conn) => {
-            let boxed_conn = Box::new(Arc::new(conn));
-            Box::into_raw(boxed_conn) as * mut ProxmoxRestoreHandle
+        Ok(restore_task) => {
+            let boxed_restore_task = Box::new(Arc::new(restore_task));
+            Box::into_raw(boxed_restore_task) as * mut ProxmoxRestoreHandle
         }
         Err(err) => raise_error_null!(error, err),
     }
@@ -701,7 +701,7 @@ pub extern "C" fn proxmox_restore_connect(
     handle: *mut ProxmoxRestoreHandle,
     error: *mut *mut c_char,
 ) -> c_int {
-    let conn = restore_handle_to_conn(handle);
+    let restore_task = restore_handle_to_task(handle);
 
     let mut result: c_int = -1;
 
@@ -709,8 +709,8 @@ pub extern "C" fn proxmox_restore_connect(
 
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
-    conn.runtime().spawn(async move {
-        let result = conn.connect().await;
+    restore_task.runtime().spawn(async move {
+        let result = restore_task.connect().await;
         callback_info.send_result(result);
     });
 
@@ -732,11 +732,11 @@ pub extern "C" fn proxmox_restore_connect_async(
     result: *mut c_int,
     error: *mut *mut c_char,
 ) {
-    let conn = restore_handle_to_conn(handle);
+    let restore_task = restore_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
 
-    conn.runtime().spawn(async move {
-        let result = conn.connect().await;
+    restore_task.runtime().spawn(async move {
+        let result = restore_task.connect().await;
         callback_info.send_result(result);
     });
 }
@@ -748,8 +748,8 @@ pub extern "C" fn proxmox_restore_connect_async(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) {
 
-    let conn = handle as * mut Arc<ProxmoxRestore>;
-    unsafe { Box::from_raw(conn) }; //drop(conn)
+    let restore_task = handle as * mut Arc<RestoreTask>;
+    unsafe { Box::from_raw(restore_task) }; //drop(restore_task)
 }
 
 /// Restore an image (sync)
@@ -766,7 +766,7 @@ pub extern "C" fn proxmox_restore_image(
     verbose: bool,
 ) -> c_int {
 
-    let conn = restore_handle_to_conn(handle);
+    let restore_task = restore_handle_to_task(handle);
 
     let result: Result<_, Error> = try_block!({
 
@@ -782,7 +782,7 @@ pub extern "C" fn proxmox_restore_image(
         };
 
         proxmox_backup::tools::runtime::block_on(
-            conn.restore_image(archive_name, write_data_callback, write_zero_callback, verbose)
+            restore_task.restore_image(archive_name, write_data_callback, write_zero_callback, verbose)
         )?;
 
         Ok(())
@@ -803,7 +803,7 @@ pub extern "C" fn proxmox_restore_open_image(
     archive_name: *const c_char,
     error: * mut * mut c_char,
 ) -> c_int {
-    let conn = restore_handle_to_conn(handle);
+    let restore_task = restore_handle_to_task(handle);
 
     let mut result: c_int = -1;
     let mut got_result_condition = GotResultCondition::new();
@@ -811,8 +811,8 @@ pub extern "C" fn proxmox_restore_open_image(
 
     let archive_name = unsafe { tools::utf8_c_string_lossy_non_null(archive_name) };
 
-    conn.runtime().spawn(async move {
-        let result = match conn.open_image(archive_name).await {
+    restore_task.runtime().spawn(async move {
+        let result = match restore_task.open_image(archive_name).await {
             Ok(res) => Ok(res as i32),
             Err(err) => Err(err)
         };
@@ -835,12 +835,12 @@ pub extern "C" fn proxmox_restore_open_image_async(
     result: *mut c_int,
     error: * mut * mut c_char,
 ) {
-    let conn = restore_handle_to_conn(handle);
+    let restore_task = restore_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
     let archive_name = unsafe { tools::utf8_c_string_lossy_non_null(archive_name) };
 
-    conn.runtime().spawn(async move {
-        let result = match conn.open_image(archive_name).await {
+    restore_task.runtime().spawn(async move {
+        let result = match restore_task.open_image(archive_name).await {
             Ok(res) => Ok(res as i32),
             Err(err) => Err(err)
         };
@@ -856,8 +856,8 @@ pub extern "C" fn proxmox_restore_get_image_length(
     aid: u8,
     error: * mut * mut c_char,
 ) -> c_long {
-    let conn = restore_handle_to_conn(handle);
-    let result = conn.get_image_length(aid);
+    let restore_task = restore_handle_to_task(handle);
+    let result = restore_task.get_image_length(aid);
     match result {
         Ok(res) => res as i64,
         Err(err) => raise_error_int!(error, err),
@@ -883,7 +883,7 @@ pub extern "C" fn proxmox_restore_read_image_at(
     size: u64,
     error: * mut * mut c_char,
 ) -> c_int {
-    let conn = restore_handle_to_conn(handle);
+    let restore_task = restore_handle_to_task(handle);
 
     let mut result: c_int = -1;
 
@@ -892,8 +892,8 @@ pub extern "C" fn proxmox_restore_read_image_at(
     let callback_info = got_result_condition.callback_info(&mut result, error);
     let data = DataPointer(data);
 
-    conn.runtime().spawn(async move {
-        let result = conn.read_image_at(aid, data, offset, size).await;
+    restore_task.runtime().spawn(async move {
+        let result = restore_task.read_image_at(aid, data, offset, size).await;
         callback_info.send_result(result);
     });
 
@@ -926,13 +926,13 @@ pub extern "C" fn proxmox_restore_read_image_at_async(
     result: *mut c_int,
     error: * mut * mut c_char,
 ) {
-    let conn = restore_handle_to_conn(handle);
+    let restore_task = restore_handle_to_task(handle);
 
     let callback_info = CallbackPointers { callback, callback_data, error, result };
     let data = DataPointer(data);
 
-    conn.runtime().spawn(async move {
-        let result = conn.read_image_at(aid, data, offset, size).await;
+    restore_task.runtime().spawn(async move {
+        let result = restore_task.read_image_at(aid, data, offset, size).await;
         callback_info.send_result(result);
     });
 }

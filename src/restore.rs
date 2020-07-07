@@ -21,7 +21,7 @@ struct ImageAccessInfo {
     archive_size: u64,
 }
 
-pub(crate) struct ProxmoxRestore {
+pub(crate) struct RestoreTask {
     setup: BackupSetup,
     runtime: Arc<Runtime>,
     crypt_config: Option<Arc<CryptConfig>>,
@@ -31,7 +31,7 @@ pub(crate) struct ProxmoxRestore {
     image_registry: Arc<Mutex<Registry<ImageAccessInfo>>>,
 }
 
-impl ProxmoxRestore {
+impl RestoreTask {
 
     /// Create a new instance, using the specified Runtime
     ///
