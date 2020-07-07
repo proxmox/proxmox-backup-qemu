@@ -25,6 +25,7 @@ pub(crate) struct ProxmoxRestore {
     runtime: Arc<tokio::runtime::Runtime>,
     pub crypt_config: Option<Arc<CryptConfig>>,
     pub client: OnceCell<Arc<BackupReader>>,
+    chunk_reader: OnceCell<RemoteChunkReader>,
     pub manifest: OnceCell<Arc<BackupManifest>>,
     pub image_registry: Arc<Mutex<Registry<ImageAccessInfo>>>,
 }
@@ -56,6 +57,7 @@ impl ProxmoxRestore {
             crypt_config,
             client: OnceCell::new(),
             manifest: OnceCell::new(),
+            chunk_reader: OnceCell::new(),
             image_registry: Arc::new(Mutex::new(Registry::<ImageAccessInfo>::new())),
         })
     }
@@ -76,6 +78,15 @@ impl ProxmoxRestore {
             self.setup.backup_time,
             true
         ).await?;
+
+        let chunk_reader = RemoteChunkReader::new(
+            client.clone(),
+            self.crypt_config.clone(),
+            HashMap::with_capacity(0),
+        );
+
+        self.chunk_reader.set(chunk_reader)
+            .map_err(|_| format_err!("already connected!"))?;
 
         let manifest = client.download_manifest().await?;
 
@@ -193,6 +204,11 @@ impl ProxmoxRestore {
             None => bail!("not connected"),
         };
 
+        let chunk_reader = match self.chunk_reader.get() {
+            Some(chunk_reader) => chunk_reader.clone(),
+            None => bail!("not connected"),
+        };
+
         let manifest = match self.manifest.get() {
             Some(manifest) => manifest.clone(),
             None => bail!("no manifest"),
@@ -200,13 +216,6 @@ impl ProxmoxRestore {
 
         let index = client.download_fixed_index(&manifest, &archive_name).await?;
         let archive_size = index.index_bytes();
-
-        // fixme: use one chunk reader for all images
-        let chunk_reader = RemoteChunkReader::new(
-            client.clone(),
-            self.crypt_config.clone(),
-            HashMap::with_capacity(0),
-        );
 
         let reader = BufferedFixedReader::new(index, chunk_reader);
 
