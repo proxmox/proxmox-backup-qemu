@@ -226,7 +226,7 @@ pub(crate) async fn close_image(
     let mut guard = registry.lock().unwrap();
     let info = guard.lookup(dev_id)?;
     let mut prev_csum_guard = PREVIOUS_CSUMS.lock().unwrap();
-    prev_csum_guard.insert(info.device_name.clone(), proxmox::tools::hex_to_digest(&csum).unwrap());
+    prev_csum_guard.insert(info.device_name.clone(), upload_result.csum);
 
     guard.add_file_info(json!({
         "filename": format!("{}.img.fidx", device_name),
