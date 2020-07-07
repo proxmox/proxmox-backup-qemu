@@ -4,12 +4,13 @@ use std::sync::{Mutex, Arc};
 use std::os::raw::c_int;
 
 use futures::future::{Future, TryFutureExt};
-use serde_json::{json, Value};
+use serde_json::json;
 
 use proxmox_backup::backup::*;
 use proxmox_backup::client::*;
 
 use super::BackupSetup;
+use crate::registry::Registry;
 use crate::capi_types::*;
 use crate::upload_queue::*;
 
@@ -30,36 +31,6 @@ pub struct ImageUploadInfo {
     upload_result: Option<UploadResultReceiver>,
 }
 
-pub struct Registry<T> {
-    pub info_list: Vec<T>,
-    file_list: Vec<Value>,
-}
-
-impl<T> Registry<T> {
-
-    pub fn new() -> Self {
-        Self {
-            info_list: Vec::new(),
-            file_list: Vec::new(),
-        }
-    }
-
-    pub fn register(&mut self, info: T) -> Result<u8, Error> {
-        let dev_id = self.info_list.len();
-        if dev_id > 255 {
-            bail!("register failed - too many images/archives (limit is 255)");
-        }
-        self.info_list.push(info);
-        Ok(dev_id as u8)
-    }
-
-    pub fn lookup(&mut self, id: u8) -> Result<&mut T, Error> {
-        if id as usize >= self.info_list.len() {
-            bail!("lookup failed for id = {}", id);
-        }
-        Ok(&mut self.info_list[id as usize])
-    }
-}
 
 // Note: We alway register/upload a chunk containing zeros
 async fn register_zero_chunk(
@@ -101,7 +72,7 @@ pub(crate) async fn add_config(
     let stats = client.upload_blob_from_data(data, &blob_name, true, Some(false)).await?;
 
     let mut guard = registry.lock().unwrap();
-    guard.file_list.push(json!({
+    guard.add_file_info(json!({
         "filename": blob_name,
         "size": stats.size,
         "csum": proxmox::tools::digest_to_hex(&stats.csum),
@@ -261,7 +232,7 @@ pub(crate) async fn close_image(
     }
 
     let mut guard = registry.lock().unwrap();
-    guard.file_list.push(json!({
+    guard.add_file_info(json!({
         "filename": format!("{}.img.fidx", device_name),
         "size": device_size,
         "csum": csum.clone(),
@@ -404,7 +375,7 @@ pub(crate) async fn finish_backup(
             "backup-type": "vm",
             "backup-id": setup.backup_id,
             "backup-time": setup.backup_time.timestamp(),
-            "files": &guard.file_list,
+            "files": &guard.file_list(),
         });
 
         //println!("Upload index.json");

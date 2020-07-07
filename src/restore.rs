@@ -12,7 +12,7 @@ use proxmox_backup::backup::*;
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
 
 use super::BackupSetup;
-use crate::commands::Registry;
+use crate::registry::Registry;
 use crate::capi_types::DataPointer;
 
 struct ImageAccessInfo {

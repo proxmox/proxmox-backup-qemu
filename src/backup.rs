@@ -11,6 +11,7 @@ use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupWriter};
 
 use super::BackupSetup;
 use crate::capi_types::*;
+use crate::registry::Registry;
 use crate::commands::*;
 
 pub(crate) struct BackupTask {

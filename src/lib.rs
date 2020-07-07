@@ -12,6 +12,7 @@ use chrono::{DateTime, Utc, TimeZone};
 mod capi_types;
 use capi_types::*;
 
+mod registry;
 mod upload_queue;
 mod commands;
 
