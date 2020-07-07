@@ -5,6 +5,7 @@ use std::convert::TryInto;
 
 use anyhow::{format_err, bail, Error};
 use once_cell::sync::OnceCell;
+use tokio::runtime::Runtime;
 
 use proxmox_backup::tools::runtime::{get_runtime, block_in_place};
 use proxmox_backup::backup::*;
@@ -22,7 +23,7 @@ pub struct ImageAccessInfo {
 
 pub(crate) struct ProxmoxRestore {
     setup: BackupSetup,
-    runtime: Arc<tokio::runtime::Runtime>,
+    runtime: Arc<Runtime>,
     pub crypt_config: Option<Arc<CryptConfig>>,
     pub client: OnceCell<Arc<BackupReader>>,
     chunk_reader: OnceCell<RemoteChunkReader>,
@@ -32,11 +33,11 @@ pub(crate) struct ProxmoxRestore {
 
 impl ProxmoxRestore {
 
-    pub fn new(setup: BackupSetup) -> Result<Self, Error> {
-
-        // keep a reference to the runtime - else the runtime can be dropped
-        // and further connections fails.
-        let runtime = get_runtime();
+    /// Create a new instance, using the specified Runtime
+    ///
+    /// We keep a reference to the runtime - else the runtime can be
+    /// dropped and further connections fails.
+    pub fn with_runtime(setup: BackupSetup, runtime: Arc<Runtime>) -> Result<Self, Error> {
 
         let crypt_config = match setup.keyfile {
             None => None,
@@ -60,6 +61,11 @@ impl ProxmoxRestore {
             chunk_reader: OnceCell::new(),
             image_registry: Arc::new(Mutex::new(Registry::<ImageAccessInfo>::new())),
         })
+    }
+
+    pub fn new(setup: BackupSetup) -> Result<Self, Error> {
+        let runtime = get_runtime();
+        Self::with_runtime(setup, runtime)
     }
 
     pub async fn connect(&self) -> Result<libc::c_int, Error> {
