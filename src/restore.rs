@@ -71,7 +71,7 @@ impl ProxmoxRestore {
             http,
             self.crypt_config.clone(),
             &self.setup.store,
-            "vm", // fixme:
+            &self.setup.backup_type,
             &self.setup.backup_id,
             self.setup.backup_time,
             true
