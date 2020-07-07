@@ -15,20 +15,20 @@ use super::BackupSetup;
 use crate::commands::Registry;
 use crate::capi_types::DataPointer;
 
-pub struct ImageAccessInfo {
-    pub reader: Arc<Mutex<BufferedFixedReader<RemoteChunkReader>>>,
-    pub archive_name: String,
-    pub archive_size: u64,
+struct ImageAccessInfo {
+    reader: Arc<Mutex<BufferedFixedReader<RemoteChunkReader>>>,
+    _archive_name: String,
+    archive_size: u64,
 }
 
 pub(crate) struct ProxmoxRestore {
     setup: BackupSetup,
     runtime: Arc<Runtime>,
-    pub crypt_config: Option<Arc<CryptConfig>>,
-    pub client: OnceCell<Arc<BackupReader>>,
+    crypt_config: Option<Arc<CryptConfig>>,
+    client: OnceCell<Arc<BackupReader>>,
     chunk_reader: OnceCell<RemoteChunkReader>,
-    pub manifest: OnceCell<Arc<BackupManifest>>,
-    pub image_registry: Arc<Mutex<Registry<ImageAccessInfo>>>,
+    manifest: OnceCell<Arc<BackupManifest>>,
+    image_registry: Arc<Mutex<Registry<ImageAccessInfo>>>,
 }
 
 impl ProxmoxRestore {
@@ -226,7 +226,8 @@ impl ProxmoxRestore {
         let reader = BufferedFixedReader::new(index, chunk_reader);
 
         let info = ImageAccessInfo {
-            archive_name, archive_size,
+            archive_size,
+            _archive_name: archive_name, /// useful to debug
             reader: Arc::new(Mutex::new(reader)),
         };
 
