@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.5.1-1) unstable; urgency=medium
+
+  * also improve code resuse and parameter checks for restore
+
+ -- Proxmox Support Team <support@proxmox.com>  Wed, 08 Jul 2020 08:07:39 +0200
+
 proxmox-backup-qemu (0.5.0-1) unstable; urgency=medium
 
   * improve parameter checks
