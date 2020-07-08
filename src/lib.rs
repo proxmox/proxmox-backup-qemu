@@ -66,6 +66,16 @@ macro_rules! raise_error_int {
     }}
 }
 
+macro_rules! param_not_null {
+    ($name:ident, $callback_info:expr) => {{
+        if $name.is_null() {
+            let result = Err(format_err!("{} may not be NULL", stringify!($name)));
+            $callback_info.send_result(result);
+            return;
+        }
+    }}
+}
+
 /// Returns the text presentation (relative path) for a backup snapshot
 ///
 /// The resturned value is allocated with strdup(), and can be freed
@@ -350,6 +360,7 @@ pub extern "C" fn proxmox_backup_register_image(
 
     return result;
 }
+
 /// Register a backup image
 ///
 /// Create a new image archive on the backup server
@@ -369,6 +380,8 @@ pub extern "C" fn proxmox_backup_register_image_async(
 ) {
     let task = backup_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+
+    param_not_null!(device_name, callback_info);
 
     let device_name = unsafe { tools::utf8_c_string_lossy_non_null(device_name) };
 
@@ -426,7 +439,10 @@ pub extern "C" fn proxmox_backup_add_config_async(
 
     let callback_info = CallbackPointers { callback, callback_data, error, result };
 
+    param_not_null!(name, callback_info);
     let name = unsafe { tools::utf8_c_string_lossy_non_null(name) };
+
+    param_not_null!(data, callback_info);
     let data: Vec<u8> = unsafe { std::slice::from_raw_parts(data, size as usize).to_vec() };
 
     task.runtime().spawn(async move {
@@ -504,6 +520,7 @@ pub extern "C" fn proxmox_backup_write_data_async(
 ) {
     let task = backup_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+
     let data = DataPointer(data);
 
     task.runtime().spawn(async move {
