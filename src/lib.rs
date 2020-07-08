@@ -252,18 +252,19 @@ pub extern "C" fn proxmox_backup_connect(
     handle: *mut ProxmoxBackupHandle,
     error: *mut *mut c_char,
 ) -> c_int {
-    let task = backup_handle_to_task(handle);
-
     let mut result: c_int = -1;
 
     let mut got_result_condition = GotResultCondition::new();
 
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
-    task.runtime().spawn(async move {
-        let result = task.connect().await;
-        callback_info.send_result(result);
-    });
+    proxmox_backup_connect_async(
+        handle,
+        callback_info.callback,
+        callback_info.callback_data,
+        callback_info.result,
+        callback_info.error,
+    );
 
     got_result_condition.wait();
 
@@ -716,18 +717,19 @@ pub extern "C" fn proxmox_restore_connect(
     handle: *mut ProxmoxRestoreHandle,
     error: *mut *mut c_char,
 ) -> c_int {
-    let restore_task = restore_handle_to_task(handle);
-
     let mut result: c_int = -1;
 
     let mut got_result_condition = GotResultCondition::new();
 
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
-    restore_task.runtime().spawn(async move {
-        let result = restore_task.connect().await;
-        callback_info.send_result(result);
-    });
+    proxmox_restore_connect_async(
+        handle,
+        callback_info.callback,
+        callback_info.callback_data,
+        callback_info.result,
+        callback_info.error,
+    );
 
     got_result_condition.wait();
 
@@ -818,21 +820,17 @@ pub extern "C" fn proxmox_restore_open_image(
     archive_name: *const c_char,
     error: * mut * mut c_char,
 ) -> c_int {
-    let restore_task = restore_handle_to_task(handle);
-
     let mut result: c_int = -1;
     let mut got_result_condition = GotResultCondition::new();
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
-    let archive_name = unsafe { tools::utf8_c_string_lossy_non_null(archive_name) };
-
-    restore_task.runtime().spawn(async move {
-        let result = match restore_task.open_image(archive_name).await {
-            Ok(res) => Ok(res as i32),
-            Err(err) => Err(err)
-        };
-        callback_info.send_result(result);
-    });
+    proxmox_restore_open_image_async(
+        handle, archive_name,
+        callback_info.callback,
+        callback_info.callback_data,
+        callback_info.result,
+        callback_info.error,
+    );
 
     got_result_condition.wait();
 
@@ -852,6 +850,8 @@ pub extern "C" fn proxmox_restore_open_image_async(
 ) {
     let restore_task = restore_handle_to_task(handle);
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+
+    param_not_null!(archive_name, callback_info);
     let archive_name = unsafe { tools::utf8_c_string_lossy_non_null(archive_name) };
 
     restore_task.runtime().spawn(async move {
@@ -898,19 +898,19 @@ pub extern "C" fn proxmox_restore_read_image_at(
     size: u64,
     error: * mut * mut c_char,
 ) -> c_int {
-    let restore_task = restore_handle_to_task(handle);
-
     let mut result: c_int = -1;
 
     let mut got_result_condition = GotResultCondition::new();
 
     let callback_info = got_result_condition.callback_info(&mut result, error);
-    let data = DataPointer(data);
 
-    restore_task.runtime().spawn(async move {
-        let result = restore_task.read_image_at(aid, data, offset, size).await;
-        callback_info.send_result(result);
-    });
+    proxmox_restore_read_image_at_async(
+        handle, aid, data, offset, size,
+        callback_info.callback,
+        callback_info.callback_data,
+        callback_info.result,
+        callback_info.error,
+    );
 
     got_result_condition.wait();
 
@@ -944,6 +944,8 @@ pub extern "C" fn proxmox_restore_read_image_at_async(
     let restore_task = restore_handle_to_task(handle);
 
     let callback_info = CallbackPointers { callback, callback_data, error, result };
+
+    param_not_null!(data, callback_info);
     let data = DataPointer(data);
 
     restore_task.runtime().spawn(async move {
