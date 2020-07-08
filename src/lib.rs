@@ -296,7 +296,8 @@ pub extern "C" fn proxmox_backup_abort(
     reason: *const c_char,
 ) {
     let task = backup_handle_to_task(handle);
-    let reason = unsafe { tools::utf8_c_string_lossy_non_null(reason) };
+    let reason = tools::utf8_c_string_lossy(reason)
+        .unwrap_or(String::from("no reason (NULL)"));
     task.abort(reason);
 }
 
