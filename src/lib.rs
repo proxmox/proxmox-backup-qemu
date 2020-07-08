@@ -316,9 +316,10 @@ pub extern "C" fn proxmox_backup_check_incremental(
 
     if device_name.is_null() { return 0; }
 
-    let device_name = unsafe { tools::utf8_c_string_lossy_non_null(device_name) };
-
-    if task.check_incremental(device_name, size) { 1 } else { 0 }
+    match tools::utf8_c_string_lossy(device_name) {
+        None => 0,
+        Some(device_name) => if task.check_incremental(device_name, size) { 1 } else { 0 },
+    }
 }
 
 /// Register a backup image (sync)
