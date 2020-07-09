@@ -114,7 +114,11 @@ pub(crate) async fn register_image(
 
     let index = match manifest {
         Some(manifest) => {
-            Some(client.download_previous_fixed_index(&archive_name, &manifest, known_chunks.clone()).await?)
+            match client.download_previous_fixed_index(&archive_name, &manifest, known_chunks.clone()).await {
+                Ok(index) => Some(index),
+                // not having a previous index is not fatal, so ignore errors
+                Err(_) => None
+            }
         },
         None => None
     };
