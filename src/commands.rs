@@ -9,7 +9,6 @@ use serde_json::json;
 use proxmox_backup::backup::*;
 use proxmox_backup::client::*;
 
-use super::BackupSetup;
 use crate::registry::Registry;
 use crate::capi_types::*;
 use crate::upload_queue::*;
@@ -61,24 +60,20 @@ async fn register_zero_chunk(
 
 pub(crate) async fn add_config(
     client: Arc<BackupWriter>,
-    registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
+    manifest: Arc<Mutex<BackupManifest>>,
     name: String,
     data: Vec<u8>,
     compress: bool,
-    encrypt: bool,
+    crypt_mode: CryptMode,
 ) -> Result<c_int, Error> {
     //println!("add config {} size {}", name, size);
 
     let blob_name = format!("{}.blob", name);
 
-    let stats = client.upload_blob_from_data(data, &blob_name, compress, encrypt).await?;
+    let stats = client.upload_blob_from_data(data, &blob_name, compress, crypt_mode == CryptMode::Encrypt).await?;
 
-    let mut guard = registry.lock().unwrap();
-    guard.add_file_info(json!({
-        "filename": blob_name,
-        "size": stats.size,
-        "csum": proxmox::tools::digest_to_hex(&stats.csum),
-    }));
+    let mut guard = manifest.lock().unwrap();
+    guard.add_file(blob_name, stats.size, stats.csum, crypt_mode)?;
 
     Ok(0)
 }
@@ -194,8 +189,10 @@ pub(crate) async fn register_image(
 
 pub(crate) async fn close_image(
     client: Arc<BackupWriter>,
+    manifest: Arc<Mutex<BackupManifest>>,
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     dev_id: u8,
+    crypt_mode: CryptMode,
 ) -> Result<c_int, Error> {
 
     //println!("close image {}", dev_id);
@@ -235,11 +232,9 @@ pub(crate) async fn close_image(
     let mut prev_csum_guard = PREVIOUS_CSUMS.lock().unwrap();
     prev_csum_guard.insert(info.device_name.clone(), upload_result.csum);
 
-    guard.add_file_info(json!({
-        "filename": format!("{}.img.fidx", device_name),
-        "size": device_size,
-        "csum": csum.clone(),
-    }));
+
+    let mut guard = manifest.lock().unwrap();
+    guard.add_file(format!("{}.img.fidx", device_name), device_size, upload_result.csum, crypt_mode)?;
 
     Ok(0)
 }
@@ -366,29 +361,18 @@ pub(crate) async fn write_data(
 
 pub(crate) async fn finish_backup(
     client: Arc<BackupWriter>,
-    crypt_mode: CryptMode,
-    registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
-    setup: BackupSetup,
+    crypt_config: Option<Arc<CryptConfig>>,
+    manifest: Arc<Mutex<BackupManifest>>,
 ) -> Result<c_int, Error> {
 
-    //println!("call finish");
-
-    let index_data = {
-        let guard = registry.lock().unwrap();
-
-        let index = json!({
-            "backup-type": "vm",
-            "backup-id": setup.backup_id,
-            "backup-time": setup.backup_time.timestamp(),
-            "files": &guard.file_list(),
-        });
-
-        //println!("Upload index.json");
-        serde_json::to_string_pretty(&index)?.into()
+    let manifest = {
+        let guard = manifest.lock().unwrap();
+        guard.to_string(crypt_config.as_ref().map(Arc::as_ref))
+            .map_err(|err| format_err!("unable to format manifest - {}", err))?
     };
 
     client
-        .upload_blob_from_data(index_data, "index.json.blob", true, crypt_mode == CryptMode::Encrypt)
+        .upload_blob_from_data(manifest.into_bytes(), MANIFEST_BLOB_NAME, true, false)
         .await?;
 
     client.finish().await?;

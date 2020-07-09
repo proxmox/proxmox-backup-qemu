@@ -1,5 +1,4 @@
 use anyhow::{bail, Error};
-use serde_json::Value;
 
 /// Helper to store data, accessible by integer ID
 ///
@@ -7,17 +6,13 @@ use serde_json::Value;
 /// generate integer handles to pass them to "C" code.
 pub struct Registry<T> {
     info_list: Vec<T>,
-    file_list: Vec<Value>,
 }
 
 impl<T> Registry<T> {
 
     /// Create a new instance
     pub fn new() -> Self {
-        Self {
-            info_list: Vec::new(),
-            file_list: Vec::new(),
-        }
+        Self { info_list: Vec::new() }
     }
 
     /// Register data, returns associated ID
@@ -36,17 +31,5 @@ impl<T> Registry<T> {
             bail!("lookup failed for id = {}", id);
         }
         Ok(&mut self.info_list[id as usize])
-    }
-
-    /// Store info in a list
-    ///
-    /// We use this to store data for the backup manifest.
-    pub fn add_file_info(&mut self, info: Value) {
-        self.file_list.push(info);
-    }
-
-    /// Returns the list produced with add_file_info()
-    pub fn file_list(&self) -> &[Value] {
-        &self.file_list
     }
 }

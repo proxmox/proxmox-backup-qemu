@@ -8,7 +8,7 @@ use futures::future::{Future, Either, FutureExt};
 use tokio::runtime::Runtime;
 
 use proxmox_backup::tools::runtime::get_runtime_with_builder;
-use proxmox_backup::backup::{CryptConfig, CryptMode, BackupManifest, load_and_decrypt_key};
+use proxmox_backup::backup::{CryptConfig, CryptMode, BackupDir, BackupManifest, load_and_decrypt_key};
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupWriter};
 
 use super::BackupSetup;
@@ -24,6 +24,7 @@ pub(crate) struct BackupTask {
     crypt_config: Option<Arc<CryptConfig>>,
     writer: OnceCell<Arc<BackupWriter>>,
     last_manifest: OnceCell<Arc<BackupManifest>>,
+    manifest: Arc<Mutex<BackupManifest>>,
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
     abort: tokio::sync::broadcast::Sender<()>,
@@ -58,10 +59,14 @@ impl BackupTask {
 
         let (abort, _) = tokio::sync::broadcast::channel(16);
 
+        let snapshot = BackupDir::new(&setup.backup_type, &setup.backup_id, setup.backup_time.timestamp());
+        let manifest = Arc::new(Mutex::new(BackupManifest::new(snapshot)));
+
         let registry = Arc::new(Mutex::new(Registry::<ImageUploadInfo>::new()));
         let known_chunks = Arc::new(Mutex::new(HashSet::new()));
 
-        Ok(Self { runtime, setup, compress, crypt_mode, crypt_config, abort, registry, known_chunks,
+        Ok(Self { runtime, setup, compress, crypt_mode, crypt_config, abort,
+                  registry, manifest, known_chunks,
                   writer: OnceCell::new(), last_manifest: OnceCell::new(),
                   aborted: OnceCell::new() })
     }
@@ -145,11 +150,11 @@ impl BackupTask {
 
         let command_future = add_config(
             writer,
-            self.registry.clone(),
+            self.manifest.clone(),
             name,
             data,
             self.compress,
-            self.crypt_mode == CryptMode::Encrypt,
+            self.crypt_mode,
         );
 
         let mut abort_rx = self.abort.subscribe();
@@ -240,7 +245,14 @@ impl BackupTask {
             None => bail!("not connected"),
         };
 
-        let command_future = close_image(writer, self.registry.clone(), dev_id);
+        let command_future = close_image(
+            writer,
+            self.manifest.clone(),
+            self.registry.clone(),
+            dev_id,
+            self.crypt_mode,
+        );
+
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
@@ -254,12 +266,8 @@ impl BackupTask {
             None => bail!("not connected"),
         };
 
-        let command_future = finish_backup(
-            writer,
-            self.crypt_mode,
-            self.registry.clone(),
-            self.setup.clone(),
-        );
+        let command_future = finish_backup(writer, self.crypt_config.clone(), self.manifest.clone());
+
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
