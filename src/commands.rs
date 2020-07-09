@@ -64,12 +64,14 @@ pub(crate) async fn add_config(
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     name: String,
     data: Vec<u8>,
+    compress: bool,
+    encrypt: bool,
 ) -> Result<c_int, Error> {
     //println!("add config {} size {}", name, size);
 
     let blob_name = format!("{}.blob", name);
 
-    let stats = client.upload_blob_from_data(data, &blob_name, true, Some(false)).await?;
+    let stats = client.upload_blob_from_data(data, &blob_name, compress, encrypt).await?;
 
     let mut guard = registry.lock().unwrap();
     guard.add_file_info(json!({
@@ -103,6 +105,7 @@ pub(crate) fn check_last_incremental_csum(
 pub(crate) async fn register_image(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
+    crypt_mode: CryptMode,
     manifest: Option<Arc<BackupManifest>>,
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
@@ -158,8 +161,12 @@ pub(crate) async fn register_image(
 
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
 
-    let zero_chunk_digest =
-        register_zero_chunk(client.clone(), crypt_config, chunk_size as usize, wid).await?;
+    let zero_chunk_digest = register_zero_chunk(
+        client.clone(),
+        if crypt_mode == CryptMode::Encrypt { crypt_config } else { None },
+        chunk_size as usize,
+        wid,
+    ).await?;
 
     let (upload_queue, upload_result) = create_upload_queue(
         client.clone(),
@@ -248,6 +255,7 @@ pub(crate) async fn write_data(
     offset: u64,
     size: u64, // actual data size
     chunk_size: u64, // expected data size
+    compress: bool,
 ) -> Result<c_int, Error> {
 
     //println!("dev {}: write {} {}", dev_id, offset, size);
@@ -273,7 +281,7 @@ pub(crate) async fn write_data(
         } else {
             let data: &[u8] = unsafe { std::slice::from_raw_parts(data.0, size as usize) };
 
-            let mut chunk_builder = DataChunkBuilder::new(data).compress(true);
+            let mut chunk_builder = DataChunkBuilder::new(data).compress(compress);
 
             if let Some(ref crypt_config) = crypt_config {
                 chunk_builder = chunk_builder.crypt_config(crypt_config);
@@ -358,6 +366,7 @@ pub(crate) async fn write_data(
 
 pub(crate) async fn finish_backup(
     client: Arc<BackupWriter>,
+    crypt_mode: CryptMode,
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     setup: BackupSetup,
 ) -> Result<c_int, Error> {
@@ -379,7 +388,7 @@ pub(crate) async fn finish_backup(
     };
 
     client
-        .upload_blob_from_data(index_data, "index.json.blob", true, Some(true))
+        .upload_blob_from_data(index_data, "index.json.blob", true, crypt_mode == CryptMode::Encrypt)
         .await?;
 
     client.finish().await?;

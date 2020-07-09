@@ -102,7 +102,7 @@ impl RestoreTask {
         self.chunk_reader.set(chunk_reader)
             .map_err(|_| format_err!("already connected!"))?;
 
-        let manifest = client.download_manifest().await?;
+        let (manifest, _) = client.download_manifest().await?;
 
         self.manifest.set(Arc::new(manifest))
             .map_err(|_| format_err!("already connected!"))?;

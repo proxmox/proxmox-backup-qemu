@@ -176,6 +176,8 @@ ProxmoxBackupHandle *proxmox_backup_new(const char *repo,
                                         const char *password,
                                         const char *keyfile,
                                         const char *key_password,
+                                        bool compress,
+                                        bool encrypt,
                                         const char *fingerprint,
                                         char **error);
 

@@ -8,7 +8,7 @@ use futures::future::{Future, Either, FutureExt};
 use tokio::runtime::Runtime;
 
 use proxmox_backup::tools::runtime::get_runtime_with_builder;
-use proxmox_backup::backup::{CryptConfig, BackupManifest, load_and_decrypt_key};
+use proxmox_backup::backup::{CryptConfig, CryptMode, BackupManifest, load_and_decrypt_key};
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupWriter};
 
 use super::BackupSetup;
@@ -19,6 +19,8 @@ use crate::commands::*;
 pub(crate) struct BackupTask {
     setup: BackupSetup,
     runtime: Arc<Runtime>,
+    compress: bool,
+    crypt_mode: CryptMode,
     crypt_config: Option<Arc<CryptConfig>>,
     writer: OnceCell<Arc<BackupWriter>>,
     last_manifest: OnceCell<Arc<BackupManifest>>,
@@ -34,7 +36,12 @@ impl BackupTask {
     ///
     /// We keep a reference to the runtime - else the runtime can be
     /// dropped and further connections fails.
-    pub fn with_runtime(setup: BackupSetup, runtime: Arc<Runtime>) -> Result<Self, Error> {
+    pub fn with_runtime(
+        setup: BackupSetup,
+        compress: bool,
+        crypt_mode: CryptMode,
+        runtime: Arc<Runtime>
+    ) -> Result<Self, Error> {
 
         let crypt_config = match setup.keyfile {
             None => None,
@@ -54,12 +61,12 @@ impl BackupTask {
         let registry = Arc::new(Mutex::new(Registry::<ImageUploadInfo>::new()));
         let known_chunks = Arc::new(Mutex::new(HashSet::new()));
 
-        Ok(Self { runtime, setup, crypt_config, abort, registry, known_chunks,
+        Ok(Self { runtime, setup, compress, crypt_mode, crypt_config, abort, registry, known_chunks,
                   writer: OnceCell::new(), last_manifest: OnceCell::new(),
                   aborted: OnceCell::new() })
     }
 
-    pub fn new(setup: BackupSetup) -> Result<Self, Error> {
+    pub fn new(setup: BackupSetup, compress: bool, crypt_mode: CryptMode) -> Result<Self, Error> {
         let runtime = get_runtime_with_builder(|| {
             let mut builder = tokio::runtime::Builder::new();
             builder.threaded_scheduler();
@@ -69,7 +76,7 @@ impl BackupTask {
             builder.thread_name("proxmox-backup-worker");
             builder
         });
-        Self::with_runtime(setup, runtime)
+        Self::with_runtime(setup, compress, crypt_mode, runtime)
     }
 
     pub fn runtime(&self) -> tokio::runtime::Handle {
@@ -140,7 +147,10 @@ impl BackupTask {
             writer,
             self.registry.clone(),
             name,
-            data);
+            data,
+            self.compress,
+            self.crypt_mode == CryptMode::Encrypt,
+        );
 
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
@@ -163,7 +173,7 @@ impl BackupTask {
 
         let command_future = write_data(
             writer,
-            self.crypt_config.clone(),
+            if self.crypt_mode == CryptMode::Encrypt { self.crypt_config.clone() } else { None },
             self.registry.clone(),
             self.known_chunks.clone(),
             dev_id,
@@ -171,6 +181,7 @@ impl BackupTask {
             offset,
             size,
             self.setup.chunk_size,
+            self.compress,
         );
 
         let mut abort_rx = self.abort.subscribe();
@@ -206,6 +217,7 @@ impl BackupTask {
         let command_future = register_image(
             writer,
             self.crypt_config.clone(),
+            self.crypt_mode,
             self.last_manifest.get().map(|m| m.clone()),
             self.registry.clone(),
             self.known_chunks.clone(),
@@ -244,6 +256,7 @@ impl BackupTask {
 
         let command_future = finish_backup(
             writer,
+            self.crypt_mode,
             self.registry.clone(),
             self.setup.clone(),
         );

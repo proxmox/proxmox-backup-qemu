@@ -5,7 +5,7 @@ use std::os::raw::{c_uchar, c_char, c_int, c_void, c_long};
 use std::sync::{Arc, Mutex, Condvar};
 
 use proxmox::try_block;
-use proxmox_backup::backup::BackupDir;
+use proxmox_backup::backup::{CryptMode, BackupDir};
 use proxmox_backup::client::BackupRepository;
 use chrono::{DateTime, Utc, TimeZone};
 
@@ -189,6 +189,8 @@ pub extern "C" fn proxmox_backup_new(
     password: *const c_char,
     keyfile: *const c_char,
     key_password: *const c_char,
+    compress: bool,
+    encrypt: bool,
     fingerprint: *const c_char,
     error: * mut * mut c_char,
 ) -> *mut ProxmoxBackupHandle {
@@ -208,6 +210,12 @@ pub extern "C" fn proxmox_backup_new(
         let key_password = tools::utf8_c_string(key_password)?;
         let fingerprint = tools::utf8_c_string(fingerprint)?;
 
+        let crypt_mode = if keyfile.is_some() {
+            if encrypt { CryptMode::Encrypt } else {  CryptMode::SignOnly }
+        } else {
+            CryptMode::None
+        };
+
         let setup = BackupSetup {
             host: repo.host().to_owned(),
             user: repo.user().to_owned(),
@@ -222,7 +230,7 @@ pub extern "C" fn proxmox_backup_new(
             fingerprint,
         };
 
-        BackupTask::new(setup)
+        BackupTask::new(setup, compress, crypt_mode)
     });
 
     match task {
