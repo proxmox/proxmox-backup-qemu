@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.6.1-1) unstable; urgency=medium
+
+  * ignore missing or bad previous index
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 09 Jul 2020 14:23:36 +0200
+
 proxmox-backup-qemu (0.6.0-1) unstable; urgency=medium
 
   * WARNING: This breaks binary API again!
