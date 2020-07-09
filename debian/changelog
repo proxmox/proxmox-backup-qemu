@@ -1,3 +1,13 @@
+proxmox-backup-qemu (0.6.0-1) unstable; urgency=medium
+
+  * WARNING: This breaks binary API again!
+
+  * produce correct manifest
+
+  * add compress and encrypt paramaters
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 09 Jul 2020 12:20:29 +0200
+
 proxmox-backup-qemu (0.5.1-1) unstable; urgency=medium
 
   * also improve code resuse and parameter checks for restore
