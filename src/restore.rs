@@ -1,13 +1,14 @@
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::SeekFrom;
 use std::convert::TryInto;
 
 use anyhow::{format_err, bail, Error};
 use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
+use tokio::prelude::*;
 
-use proxmox_backup::tools::runtime::{get_runtime_with_builder, block_in_place};
+use proxmox_backup::tools::runtime::get_runtime_with_builder;
 use proxmox_backup::backup::*;
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
 
@@ -16,7 +17,7 @@ use crate::registry::Registry;
 use crate::capi_types::DataPointer;
 
 struct ImageAccessInfo {
-    reader: Arc<Mutex<BufferedFixedReader<RemoteChunkReader>>>,
+    reader: Arc<tokio::sync::Mutex<AsyncIndexReader<RemoteChunkReader, FixedIndexReader>>>,
     _archive_name: String,
     archive_size: u64,
 }
@@ -231,12 +232,12 @@ impl RestoreTask {
         let index = client.download_fixed_index(&manifest, &archive_name).await?;
         let archive_size = index.index_bytes();
 
-        let reader = BufferedFixedReader::new(index, chunk_reader);
+        let reader = AsyncIndexReader::new(index, chunk_reader);
 
         let info = ImageAccessInfo {
             archive_size,
             _archive_name: archive_name, /// useful to debug
-            reader: Arc::new(Mutex::new(reader)),
+            reader: Arc::new(tokio::sync::Mutex::new(reader)),
         };
 
         (*self.image_registry.lock().unwrap()).register(info)
@@ -260,12 +261,10 @@ impl RestoreTask {
             bail!("read index {} out of bounds {}", offset, image_size);
         }
 
-        let bytes = block_in_place(|| {
-            let mut reader = reader.lock().unwrap();
-            reader.seek(SeekFrom::Start(offset))?;
-            let buf: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(data.0 as *mut u8, size as usize)};
-            reader.read(buf)
-        })?;
+        let mut reader = reader.lock().await;
+        reader.seek(SeekFrom::Start(offset)).await?;
+        let buf: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(data.0 as *mut u8, size as usize)};
+        let bytes = reader.read(buf).await?;
 
         Ok(bytes.try_into()?)
     }
