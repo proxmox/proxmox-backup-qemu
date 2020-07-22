@@ -364,8 +364,8 @@ int proxmox_restore_read_image_at(ProxmoxRestoreHandle *handle,
  * Note: The data pointer needs to be valid until the async
  * opteration is finished.
  *
- * Note: It is not an error for a successful call to transfer fewer
- * bytes than requested.
+ * Note: The call will only ever transfer less than 'size' bytes if
+ * the end of the file has been reached.
  */
 void proxmox_restore_read_image_at_async(ProxmoxRestoreHandle *handle,
                                          uint8_t aid,

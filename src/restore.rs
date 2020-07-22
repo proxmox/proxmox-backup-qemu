@@ -262,10 +262,22 @@ impl RestoreTask {
         }
 
         let mut reader = reader.lock().await;
-        reader.seek(SeekFrom::Start(offset)).await?;
-        let buf: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(data.0 as *mut u8, size as usize)};
-        let bytes = reader.read(buf).await?;
 
-        Ok(bytes.try_into()?)
+        let buf: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(data.0 as *mut u8, size as usize)};
+        let mut read = 0;
+
+        while read < size {
+            reader.seek(SeekFrom::Start(offset + read)).await?;
+            let bytes = reader.read(&mut buf[read as usize..]).await?;
+
+            if bytes == 0 {
+                // EOF
+                break;
+            }
+
+            read += bytes as u64;
+        }
+
+        Ok(read.try_into()?)
     }
 }
