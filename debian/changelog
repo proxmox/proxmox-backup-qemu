@@ -1,3 +1,14 @@
+proxmox-backup-qemu (0.6.2-1) unstable; urgency=medium
+
+  * read_image_at: use fully async variant and iterate until buffer is filled.
+    Improves performance and usage of the QEMU block driver.
+
+  * update to new proxmox-backup v0.8.8 with, among others, improvements for
+    encrypting new backups. Older one may have compatibillity issues which were
+    ignored due to the beta status of Proxmox Backup.
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 23 Jul 2020 11:38:13 +0200
+
 proxmox-backup-qemu (0.6.1-1) unstable; urgency=medium
 
   * ignore missing or bad previous index
