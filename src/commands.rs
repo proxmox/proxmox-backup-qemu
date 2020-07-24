@@ -94,6 +94,29 @@ pub(crate) fn check_last_incremental_csum(
     }
 }
 
+pub(crate) fn check_last_encryption_mode(
+    manifest: Arc<BackupManifest>,
+    device_name: &str,
+    crypt_mode: CryptMode,
+) -> bool {
+    match manifest.lookup_file_info(&archive_name(device_name)) {
+        Ok(file) => {
+            match file.crypt_mode {
+                CryptMode::Encrypt => match crypt_mode {
+                    CryptMode::Encrypt => true,
+                    _ => false,
+                },
+                CryptMode::SignOnly | CryptMode::None => match crypt_mode {
+                    CryptMode::Encrypt => false,
+                    _ => true,
+                },
+            }
+        },
+        _ => false,
+    }
+}
+
+
 pub(crate) async fn register_image(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,

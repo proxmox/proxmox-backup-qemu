@@ -203,7 +203,10 @@ impl BackupTask {
         size: u64,
     ) -> bool {
         match self.last_manifest() {
-            Some(ref manifest) => check_last_incremental_csum(manifest.clone(), &device_name, size),
+            Some(ref manifest) => {
+                check_last_incremental_csum(manifest.clone(), &device_name, size)
+                    && check_last_encryption_mode(manifest.clone(), &device_name, self.crypt_mode)
+            },
             None => false,
         }
     }
