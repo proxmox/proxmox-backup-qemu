@@ -79,19 +79,14 @@ pub(crate) async fn add_config(
 }
 
 pub(crate) fn check_last_incremental_csum(
-    manifest: Option<Arc<BackupManifest>>,
-    device_name: String,
+    manifest: Arc<BackupManifest>,
+    device_name: &str,
     device_size: u64,
 ) -> bool {
 
-    let manifest = match manifest {
-        Some(ref manifest) => manifest,
-        None => return false,
-    };
-
     let archive_name = format!("{}.img.fidx", device_name);
 
-    match PREVIOUS_CSUMS.lock().unwrap().get(&device_name) {
+    match PREVIOUS_CSUMS.lock().unwrap().get(device_name) {
         Some(csum) => manifest.verify_file(&archive_name, &csum, device_size).is_ok(),
         None => false,
     }

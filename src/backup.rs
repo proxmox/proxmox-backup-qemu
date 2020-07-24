@@ -202,7 +202,10 @@ impl BackupTask {
         device_name: String,
         size: u64,
     ) -> bool {
-        check_last_incremental_csum(self.last_manifest(), device_name, size)
+        match self.last_manifest() {
+            Some(ref manifest) => check_last_incremental_csum(manifest.clone(), &device_name, size),
+            None => false,
+        }
     }
 
     pub async fn register_image(
