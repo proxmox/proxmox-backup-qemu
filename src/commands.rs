@@ -78,16 +78,18 @@ pub(crate) async fn add_config(
     Ok(0)
 }
 
+fn archive_name(device_name: &str) -> String {
+    format!("{}.img.fidx", device_name)
+}
+
 pub(crate) fn check_last_incremental_csum(
     manifest: Arc<BackupManifest>,
     device_name: &str,
     device_size: u64,
 ) -> bool {
 
-    let archive_name = format!("{}.img.fidx", device_name);
-
     match PREVIOUS_CSUMS.lock().unwrap().get(device_name) {
-        Some(csum) => manifest.verify_file(&archive_name, &csum, device_size).is_ok(),
+        Some(csum) => manifest.verify_file(&archive_name(device_name), &csum, device_size).is_ok(),
         None => false,
     }
 }
@@ -105,7 +107,7 @@ pub(crate) async fn register_image(
     incremental: bool,
 ) -> Result<c_int, Error> {
 
-    let archive_name = format!("{}.img.fidx", device_name);
+    let archive_name = archive_name(&device_name);
 
     let index = match manifest {
         Some(manifest) => {
