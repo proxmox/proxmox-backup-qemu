@@ -17,7 +17,7 @@ cbindgen = "0.14.2"
 [dependencies]
 libc = "0.2"
 bytes = "0.5"
-proxmox = { version = "0.2.0", features = [ "sortable-macro", "api-macro" ] }
+proxmox = { version = "0.2", features = [ "sortable-macro", "api-macro" ] }
 proxmox-backup = { git = "git://git.proxmox.com/git/proxmox-backup.git", tag = "v0.8.8" }
 #proxmox-backup = { path = "../proxmox-backup" }
 chrono = "0.4" # Date and time library for Rust
