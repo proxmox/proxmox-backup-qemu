@@ -1,5 +1,4 @@
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
 use std::io::SeekFrom;
 use std::convert::TryInto;
 
@@ -27,7 +26,6 @@ pub(crate) struct RestoreTask {
     runtime: Arc<Runtime>,
     crypt_config: Option<Arc<CryptConfig>>,
     client: OnceCell<Arc<BackupReader>>,
-    chunk_reader: OnceCell<RemoteChunkReader>,
     manifest: OnceCell<Arc<BackupManifest>>,
     image_registry: Arc<Mutex<Registry<ImageAccessInfo>>>,
 }
@@ -59,7 +57,6 @@ impl RestoreTask {
             crypt_config,
             client: OnceCell::new(),
             manifest: OnceCell::new(),
-            chunk_reader: OnceCell::new(),
             image_registry: Arc::new(Mutex::new(Registry::<ImageAccessInfo>::new())),
         })
     }
@@ -93,15 +90,6 @@ impl RestoreTask {
             self.setup.backup_time,
             true
         ).await?;
-
-        let chunk_reader = RemoteChunkReader::new(
-            client.clone(),
-            self.crypt_config.clone(),
-            HashMap::with_capacity(0),
-        );
-
-        self.chunk_reader.set(chunk_reader)
-            .map_err(|_| format_err!("already connected!"))?;
 
         let (manifest, _) = client.download_manifest().await?;
 
@@ -150,9 +138,12 @@ impl RestoreTask {
 
         let most_used = index.find_most_used_chunks(8);
 
+        let file_info = manifest.lookup_file_info(&archive_name)?;
+
         let mut chunk_reader = RemoteChunkReader::new(
             client.clone(),
             self.crypt_config.clone(),
+            file_info.chunk_crypt_mode(),
             most_used,
         );
 
@@ -219,11 +210,6 @@ impl RestoreTask {
             None => bail!("not connected"),
         };
 
-        let chunk_reader = match self.chunk_reader.get() {
-            Some(chunk_reader) => chunk_reader.clone(),
-            None => bail!("not connected"),
-        };
-
         let manifest = match self.manifest.get() {
             Some(manifest) => manifest.clone(),
             None => bail!("no manifest"),
@@ -231,6 +217,16 @@ impl RestoreTask {
 
         let index = client.download_fixed_index(&manifest, &archive_name).await?;
         let archive_size = index.index_bytes();
+        let most_used = index.find_most_used_chunks(8);
+
+        let file_info = manifest.lookup_file_info(&archive_name)?;
+
+        let chunk_reader = RemoteChunkReader::new(
+            client.clone(),
+            self.crypt_config.clone(),
+            file_info.chunk_crypt_mode(),
+            most_used,
+        );
 
         let reader = AsyncIndexReader::new(index, chunk_reader);
 
