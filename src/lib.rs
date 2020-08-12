@@ -5,6 +5,7 @@ use std::os::raw::{c_uchar, c_char, c_int, c_void, c_long};
 use std::sync::{Arc, Mutex, Condvar};
 
 use proxmox::try_block;
+use proxmox_backup::api2::types::Userid;
 use proxmox_backup::backup::{CryptMode, BackupDir};
 use proxmox_backup::client::BackupRepository;
 use chrono::{DateTime, Utc, TimeZone};
@@ -113,7 +114,7 @@ pub extern "C" fn proxmox_backup_snapshot_string(
 pub(crate) struct BackupSetup {
     pub host: String,
     pub store: String,
-    pub user: String,
+    pub user: Userid,
     pub chunk_size: u64,
     pub backup_type: String,
     pub backup_id: String,
