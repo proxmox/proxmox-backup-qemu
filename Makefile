@@ -5,10 +5,11 @@ PACKAGE=libproxmox-backup-qemu0
 ARCH:=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
 GITVERSION:=$(shell git rev-parse HEAD)
 
-DEBS=							\
-	${PACKAGE}_${DEB_VERSION}_${ARCH}.deb		\
+MAIN_DEB=${PACKAGE}_${DEB_VERSION}_${ARCH}.deb
+OTHER_DEBS=						\
 	${PACKAGE}-dev_${DEB_VERSION}_${ARCH}.deb	\
 	${PACKAGE}-dbgsym_${DEB_VERSION}_${ARCH}.deb
+DEBS=$(MAIN_DEB) $(OTHER_DEBS)
 
 DESTDIR=
 
@@ -37,8 +38,9 @@ install: target/release/libproxmox_backup_qemu.so
 	cd ${DESTDIR}/usr/lib/; ls *; ln -s libproxmox_backup_qemu.so.0 libproxmox_backup_qemu.so
 
 .PHONY: deb
-deb: $(DEBS)
-$(DEBS): build
+deb: $(OTHER_DEBS)
+$(OTHER_DEBS): $(MAIN_DEB)
+$(MAIN_DEB): build
 	cd build; dpkg-buildpackage -b -us -uc --no-pre-clean
 	lintian $(DEBS)
 
