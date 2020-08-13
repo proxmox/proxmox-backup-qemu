@@ -135,6 +135,13 @@ impl BackupTask {
         abortable_command(command_future, abort_rx.recv()).await
     }
 
+    fn need_writer(&self) -> Result<Arc<BackupWriter>, Error> {
+        self.writer
+            .get()
+            .map(Arc::clone)
+            .ok_or_else(|| format_err!("not connected"))
+    }
+
     pub async fn add_config(
         &self,
         name: String,
@@ -143,13 +150,8 @@ impl BackupTask {
 
         self.check_aborted()?;
 
-        let writer = match self.writer.get() {
-            Some(writer) => Arc::clone(writer),
-            None => bail!("not connected"),
-        };
-
         let command_future = add_config(
-            writer,
+            self.need_writer()?,
             Arc::clone(&self.manifest),
             name,
             data,
@@ -171,13 +173,8 @@ impl BackupTask {
 
         self.check_aborted()?;
 
-        let writer = match self.writer.get() {
-            Some(writer) => Arc::clone(writer),
-            None => bail!("not connected"),
-        };
-
         let command_future = write_data(
-            writer,
+            self.need_writer()?,
             if self.crypt_mode == CryptMode::Encrypt { self.crypt_config.clone() } else { None },
             Arc::clone(&self.registry),
             Arc::clone(&self.known_chunks),
@@ -220,13 +217,8 @@ impl BackupTask {
 
         self.check_aborted()?;
 
-        let writer = match self.writer.get() {
-            Some(writer) => Arc::clone(writer),
-            None => bail!("not connected"),
-        };
-
         let command_future = register_image(
-            writer,
+            self.need_writer()?,
             self.crypt_config.clone(),
             self.crypt_mode,
             self.last_manifest.get().map(Arc::clone),
@@ -246,13 +238,8 @@ impl BackupTask {
 
         self.check_aborted()?;
 
-        let writer = match self.writer.get() {
-            Some(writer) => Arc::clone(writer),
-            None => bail!("not connected"),
-        };
-
         let command_future = close_image(
-            writer,
+            self.need_writer()?,
             Arc::clone(&self.manifest),
             Arc::clone(&self.registry),
             dev_id,
@@ -267,13 +254,8 @@ impl BackupTask {
 
         self.check_aborted()?;
 
-        let writer = match self.writer.get() {
-            Some(writer) => Arc::clone(writer),
-            None => bail!("not connected"),
-        };
-
         let command_future = finish_backup(
-            writer,
+            self.need_writer()?,
             self.crypt_config.clone(),
             Arc::clone(&self.manifest),
         );
