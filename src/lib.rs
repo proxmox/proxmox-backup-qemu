@@ -1,3 +1,5 @@
+#![warn(clippy::clone_on_ref_ptr)]
+
 use anyhow::{format_err, Error};
 use std::ffi::CString;
 use std::ptr;
@@ -152,7 +154,7 @@ impl GotResultCondition {
             callback: Self::wakeup_callback,
             callback_data: (self) as *mut _ as *mut c_void,
             error,
-            result: result,
+            result,
         }
     }
 
@@ -246,7 +248,7 @@ pub extern "C" fn proxmox_backup_new(
 fn backup_handle_to_task(handle: *mut ProxmoxBackupHandle) -> Arc<BackupTask> {
     let task = unsafe { & *(handle as *const Arc<BackupTask>) };
     // increase reference count while we use it inside rust
-    task.clone()
+    Arc::clone(task)
 }
 
 /// Open connection to the backup server (sync)
@@ -277,7 +279,7 @@ pub extern "C" fn proxmox_backup_connect(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 
 /// Open connection to the backup server
@@ -317,7 +319,7 @@ pub extern "C" fn proxmox_backup_abort(
 ) {
     let task = backup_handle_to_task(handle);
     let reason = tools::utf8_c_string_lossy(reason)
-        .unwrap_or(String::from("no reason (NULL)"));
+        .unwrap_or_else(|| "no reason (NULL)".to_string());
     task.abort(reason);
 }
 
@@ -368,7 +370,7 @@ pub extern "C" fn proxmox_backup_register_image(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 
 /// Register a backup image
@@ -427,7 +429,7 @@ pub extern "C" fn proxmox_backup_add_config(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 
 /// Add a configuration blob to the backup
@@ -498,7 +500,7 @@ pub extern "C" fn proxmox_backup_write_data(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 
 /// Write data to into a registered image
@@ -563,7 +565,7 @@ pub extern "C" fn proxmox_backup_close_image(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 
 /// Close a registered image
@@ -611,7 +613,7 @@ pub extern "C" fn proxmox_backup_finish(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 
 /// Finish the backup
@@ -655,7 +657,7 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 fn restore_handle_to_task(handle: *mut ProxmoxRestoreHandle) -> Arc<RestoreTask> {
     let restore_task = unsafe { & *(handle as *const Arc<RestoreTask>) };
     // increase reference count while we use it inside rust
-    restore_task.clone()
+    Arc::clone(restore_task)
 }
 
 /// Connect the the backup server for restore (sync)
@@ -742,7 +744,7 @@ pub extern "C" fn proxmox_restore_connect(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 /// Open connection to the backup server (async)
 ///
@@ -843,7 +845,7 @@ pub extern "C" fn proxmox_restore_open_image(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 
 /// Retrieve the ID of a handle used to access data in the given archive (async)
@@ -923,7 +925,7 @@ pub extern "C" fn proxmox_restore_read_image_at(
 
     got_result_condition.wait();
 
-    return result;
+    result
 }
 
 /// Read data from the backup image at the given offset (async)

@@ -96,7 +96,7 @@ impl BackupTask {
     }
 
     pub fn abort(&self, reason: String) {
-        if let Err(_) = self.abort.send(()) {
+        if self.abort.send(()).is_err() {
             // should not happen, but log to stderr
             eprintln!("BackupTask send abort failed.");
         }
@@ -144,13 +144,13 @@ impl BackupTask {
         self.check_aborted()?;
 
         let writer = match self.writer.get() {
-            Some(writer) => writer.clone(),
+            Some(writer) => Arc::clone(writer),
             None => bail!("not connected"),
         };
 
         let command_future = add_config(
             writer,
-            self.manifest.clone(),
+            Arc::clone(&self.manifest),
             name,
             data,
             self.compress,
@@ -172,15 +172,15 @@ impl BackupTask {
         self.check_aborted()?;
 
         let writer = match self.writer.get() {
-            Some(writer) => writer.clone(),
+            Some(writer) => Arc::clone(writer),
             None => bail!("not connected"),
         };
 
         let command_future = write_data(
             writer,
             if self.crypt_mode == CryptMode::Encrypt { self.crypt_config.clone() } else { None },
-            self.registry.clone(),
-            self.known_chunks.clone(),
+            Arc::clone(&self.registry),
+            Arc::clone(&self.known_chunks),
             dev_id,
             data,
             offset,
@@ -194,7 +194,7 @@ impl BackupTask {
     }
 
     fn last_manifest(&self) -> Option<Arc<BackupManifest>> {
-        self.last_manifest.get().map(|m| m.clone())
+        self.last_manifest.get().map(Arc::clone)
     }
 
     pub fn check_incremental(
@@ -204,8 +204,8 @@ impl BackupTask {
     ) -> bool {
         match self.last_manifest() {
             Some(ref manifest) => {
-                check_last_incremental_csum(manifest.clone(), &device_name, size)
-                    && check_last_encryption_mode(manifest.clone(), &device_name, self.crypt_mode)
+                check_last_incremental_csum(Arc::clone(manifest), &device_name, size)
+                    && check_last_encryption_mode(Arc::clone(manifest), &device_name, self.crypt_mode)
             },
             None => false,
         }
@@ -221,7 +221,7 @@ impl BackupTask {
         self.check_aborted()?;
 
         let writer = match self.writer.get() {
-            Some(writer) => writer.clone(),
+            Some(writer) => Arc::clone(writer),
             None => bail!("not connected"),
         };
 
@@ -229,9 +229,9 @@ impl BackupTask {
             writer,
             self.crypt_config.clone(),
             self.crypt_mode,
-            self.last_manifest.get().map(|m| m.clone()),
-            self.registry.clone(),
-            self.known_chunks.clone(),
+            self.last_manifest.get().map(Arc::clone),
+            Arc::clone(&self.registry),
+            Arc::clone(&self.known_chunks),
             device_name,
             size,
             self.setup.chunk_size,
@@ -247,14 +247,14 @@ impl BackupTask {
         self.check_aborted()?;
 
         let writer = match self.writer.get() {
-            Some(writer) => writer.clone(),
+            Some(writer) => Arc::clone(writer),
             None => bail!("not connected"),
         };
 
         let command_future = close_image(
             writer,
-            self.manifest.clone(),
-            self.registry.clone(),
+            Arc::clone(&self.manifest),
+            Arc::clone(&self.registry),
             dev_id,
             self.crypt_mode,
         );
@@ -268,11 +268,15 @@ impl BackupTask {
         self.check_aborted()?;
 
         let writer = match self.writer.get() {
-            Some(writer) => writer.clone(),
+            Some(writer) => Arc::clone(writer),
             None => bail!("not connected"),
         };
 
-        let command_future = finish_backup(writer, self.crypt_config.clone(), self.manifest.clone());
+        let command_future = finish_backup(
+            writer,
+            self.crypt_config.clone(),
+            Arc::clone(&self.manifest),
+        );
 
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await

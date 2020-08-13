@@ -114,7 +114,7 @@ pub(crate) fn check_last_encryption_mode(
     }
 }
 
-
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn register_image(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
@@ -132,7 +132,7 @@ pub(crate) async fn register_image(
 
     let index = match manifest {
         Some(manifest) => {
-            match client.download_previous_fixed_index(&archive_name, &manifest, known_chunks.clone()).await {
+            match client.download_previous_fixed_index(&archive_name, &manifest, Arc::clone(&known_chunks)).await {
                 Ok(index) => Some(index),
                 // not having a previous index is not fatal, so ignore errors
                 Err(_) => None
@@ -179,16 +179,16 @@ pub(crate) async fn register_image(
     let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
 
     let zero_chunk_digest = register_zero_chunk(
-        client.clone(),
+        Arc::clone(&client),
         if crypt_mode == CryptMode::Encrypt { crypt_config } else { None },
         chunk_size as usize,
         wid,
     ).await?;
 
     let (upload_queue, upload_result) = create_upload_queue(
-        client.clone(),
-        known_chunks.clone(),
-        initial_index.clone(),
+        Arc::clone(&client),
+        Arc::clone(&known_chunks),
+        Arc::clone(&initial_index),
         wid,
         device_size,
         chunk_size,

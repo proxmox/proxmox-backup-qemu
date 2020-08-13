@@ -119,12 +119,12 @@ impl RestoreTask {
         }
 
         let client = match self.client.get() {
-            Some(reader) => reader.clone(),
+            Some(reader) => Arc::clone(reader),
             None => bail!("not connected"),
         };
 
         let manifest = match self.manifest.get() {
-            Some(manifest) => manifest.clone(),
+            Some(manifest) => Arc::clone(manifest),
             None => bail!("no manifest"),
         };
 
@@ -141,7 +141,7 @@ impl RestoreTask {
         let file_info = manifest.lookup_file_info(&archive_name)?;
 
         let mut chunk_reader = RemoteChunkReader::new(
-            client.clone(),
+            Arc::clone(&client),
             self.crypt_config.clone(),
             file_info.chunk_crypt_mode(),
             most_used,
@@ -206,12 +206,12 @@ impl RestoreTask {
     ) -> Result<u8, Error> {
 
         let client = match self.client.get() {
-            Some(reader) => reader.clone(),
+            Some(reader) => Arc::clone(reader),
             None => bail!("not connected"),
         };
 
         let manifest = match self.manifest.get() {
-            Some(manifest) => manifest.clone(),
+            Some(manifest) => Arc::clone(manifest),
             None => bail!("no manifest"),
         };
 
@@ -222,7 +222,7 @@ impl RestoreTask {
         let file_info = manifest.lookup_file_info(&archive_name)?;
 
         let chunk_reader = RemoteChunkReader::new(
-            client.clone(),
+            Arc::clone(&client),
             self.crypt_config.clone(),
             file_info.chunk_crypt_mode(),
             most_used,
@@ -250,7 +250,7 @@ impl RestoreTask {
         let (reader, image_size) = {
             let mut guard = self.image_registry.lock().unwrap();
             let info = guard.lookup(aid)?;
-            (info.reader.clone(), info.archive_size)
+            (Arc::clone(&info.reader), info.archive_size)
         };
 
         if offset > image_size {

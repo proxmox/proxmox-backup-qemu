@@ -70,6 +70,7 @@ async fn upload_chunk_list(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn upload_handler(
     client: Arc<BackupWriter>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
@@ -119,7 +120,12 @@ async fn upload_handler(
                 offset_list.push(offset);
 
                 if digest_list.len() >= 128 {
-                    if let Err(err) = upload_chunk_list(client.clone(), wid, &mut digest_list, &mut offset_list).await {
+                    if let Err(err) = upload_chunk_list(
+                        Arc::clone(&client),
+                        wid,
+                        &mut digest_list,
+                        &mut offset_list,
+                    ).await {
                         let _ = upload_result.send(Err(err));
                         return;
                     }
@@ -133,7 +139,12 @@ async fn upload_handler(
     }
 
     if !digest_list.is_empty() {
-        if let Err(err) = upload_chunk_list(client.clone(), wid, &mut digest_list, &mut offset_list).await {
+        if let Err(err) = upload_chunk_list(
+            Arc::clone(&client),
+            wid,
+            &mut digest_list,
+            &mut offset_list,
+        ).await {
             let _ = upload_result.send(Err(err));
             return;
         }
