@@ -135,6 +135,7 @@ struct GotResultCondition {
 
 impl GotResultCondition {
 
+    #[allow(clippy::mutex_atomic)]
     pub fn new() -> Self {
         Self {
             lock: Mutex::new(false),
@@ -160,6 +161,7 @@ impl GotResultCondition {
 
     /// Waits until the callback from callback_info is called.
     pub fn wait(&mut self) {
+        #[allow(clippy::mutex_atomic)]
         let mut done = self.lock.lock().unwrap();
         while !*done {
             done = self.cond.wait(done).unwrap();
@@ -172,6 +174,7 @@ impl GotResultCondition {
         callback_data: *mut c_void,
     ) {
         let callback_data = unsafe { &mut *( callback_data as * mut GotResultCondition) };
+        #[allow(clippy::mutex_atomic)]
         let mut done = callback_data.lock.lock().unwrap();
         *done = true;
         callback_data.cond.notify_one();
