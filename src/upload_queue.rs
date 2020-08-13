@@ -70,7 +70,7 @@ async fn upload_chunk_list(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
 async fn upload_handler(
     client: Arc<BackupWriter>,
     known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
