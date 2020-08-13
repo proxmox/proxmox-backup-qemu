@@ -101,15 +101,13 @@ pub(crate) fn check_last_encryption_mode(
 ) -> bool {
     match manifest.lookup_file_info(&archive_name(device_name)) {
         Ok(file) => {
-            match file.crypt_mode {
-                CryptMode::Encrypt => match crypt_mode {
-                    CryptMode::Encrypt => true,
-                    _ => false,
-                },
-                CryptMode::SignOnly | CryptMode::None => match crypt_mode {
-                    CryptMode::Encrypt => false,
-                    _ => true,
-                },
+            match (file.crypt_mode, crypt_mode) {
+                (CryptMode::Encrypt, CryptMode::Encrypt) => true,
+                (CryptMode::Encrypt, _) => false,
+                (CryptMode::SignOnly, CryptMode::Encrypt) => false,
+                (CryptMode::SignOnly, _) => true,
+                (CryptMode::None, CryptMode::Encrypt) => false,
+                (CryptMode::None, _) => true,
             }
         },
         _ => false,
