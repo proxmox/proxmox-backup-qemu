@@ -1,3 +1,9 @@
+proxmox-backup-qemu (0.6.4-1) unstable; urgency=medium
+
+  * fix #2866: invalidate bitmap on crypt_mode change
+
+ -- Proxmox Support Team <support@proxmox.com>  Wed, 19 Aug 2020 16:43:58 +0200
+
 proxmox-backup-qemu (0.6.3-1) unstable; urgency=medium
 
   * rebuild with proxmox-backup 0.8.10 and proxmox 0.3.3
