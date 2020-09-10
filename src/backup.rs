@@ -115,7 +115,7 @@ impl BackupTask {
             let http = HttpClient::new(&self.setup.host, &self.setup.user, options)?;
             let writer = BackupWriter::start(
                 http, self.crypt_config.clone(), &self.setup.store, "vm", &self.setup.backup_id,
-                self.setup.backup_time, false).await?;
+                self.setup.backup_time, false, false).await?;
 
             let last_manifest = writer.download_previous_manifest().await;
             let mut result = 0;
