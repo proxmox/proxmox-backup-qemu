@@ -1,9 +1,9 @@
-proxmox-backup-qemu (0.7.1-2) unstable; urgency=medium
+proxmox-backup-qemu (0.7.0-1) unstable; urgency=medium
 
   * use updated dependencies to improve server <-> client TCP throughput
     performance for high latency links
 
- -- Proxmox Support Team <support@proxmox.com>  Thu, 10 Sep 2020 10:47:39 +0200
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 10 Sep 2020 10:48:09 +0200
 
 proxmox-backup-qemu (0.6.4-1) unstable; urgency=medium
 
