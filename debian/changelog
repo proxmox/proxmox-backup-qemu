@@ -1,3 +1,10 @@
+proxmox-backup-qemu (0.7.1-1) unstable; urgency=medium
+
+  * use updated dependencies to improve server <-> client TCP throughput
+    performance for high latency links
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 10 Sep 2020 10:37:13 +0200
+
 proxmox-backup-qemu (0.6.4-1) unstable; urgency=medium
 
   * fix #2866: invalidate bitmap on crypt_mode change
