@@ -98,7 +98,7 @@ pub extern "C" fn proxmox_backup_snapshot_string(
         let backup_id: String = tools::utf8_c_string_lossy(backup_id)
             .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
 
-        let snapshot = BackupDir::new(backup_type, backup_id, backup_time);
+        let snapshot = BackupDir::new(backup_type, backup_id, backup_time)?;
 
         Ok(CString::new(format!("{}", snapshot))?)
     });
