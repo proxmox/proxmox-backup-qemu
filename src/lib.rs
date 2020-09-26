@@ -10,7 +10,6 @@ use proxmox::try_block;
 use proxmox_backup::api2::types::Userid;
 use proxmox_backup::backup::{CryptMode, BackupDir};
 use proxmox_backup::client::BackupRepository;
-use chrono::{DateTime, Utc, TimeZone};
 
 mod capi_types;
 use capi_types::*;
@@ -120,7 +119,7 @@ pub(crate) struct BackupSetup {
     pub chunk_size: u64,
     pub backup_type: String,
     pub backup_id: String,
-    pub backup_time: DateTime<Utc>,
+    pub backup_time: i64,
     pub password: Option<String>,
     pub keyfile: Option<std::path::PathBuf>,
     pub key_password: Option<String>,
@@ -209,8 +208,6 @@ pub extern "C" fn proxmox_backup_new(
         let backup_id = tools::utf8_c_string(backup_id)?
             .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
 
-        let backup_time = Utc.timestamp(backup_time as i64, 0);
-
         let password = tools::utf8_c_string(password)?;
         let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
         let key_password = tools::utf8_c_string(key_password)?;
@@ -230,7 +227,7 @@ pub extern "C" fn proxmox_backup_new(
             backup_type: String::from("vm"),
             backup_id,
             password,
-            backup_time,
+            backup_time: backup_time as i64,
             keyfile,
             key_password,
             fingerprint,

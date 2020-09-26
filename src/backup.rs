@@ -59,7 +59,7 @@ impl BackupTask {
 
         let (abort, _) = tokio::sync::broadcast::channel(16);
 
-        let snapshot = BackupDir::new(&setup.backup_type, &setup.backup_id, setup.backup_time.timestamp())?;
+        let snapshot = BackupDir::new(&setup.backup_type, &setup.backup_id, setup.backup_time)?;
         let manifest = Arc::new(Mutex::new(BackupManifest::new(snapshot)));
 
         let registry = Arc::new(Mutex::new(Registry::<ImageUploadInfo>::new()));
