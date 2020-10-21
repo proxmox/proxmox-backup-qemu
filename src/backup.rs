@@ -112,7 +112,7 @@ impl BackupTask {
                 .fingerprint(self.setup.fingerprint.clone())
                 .password(self.setup.password.clone());
 
-            let http = HttpClient::new(&self.setup.host, &self.setup.user, options)?;
+            let http = HttpClient::new(&self.setup.host, self.setup.port, &self.setup.user, options)?;
             let writer = BackupWriter::start(
                 http, self.crypt_config.clone(), &self.setup.store, "vm", &self.setup.backup_id,
                 self.setup.backup_time, false, false).await?;

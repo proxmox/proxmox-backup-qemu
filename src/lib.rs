@@ -114,6 +114,7 @@ pub extern "C" fn proxmox_backup_snapshot_string(
 #[derive(Clone)]
 pub(crate) struct BackupSetup {
     pub host: String,
+    pub port: u16,
     pub store: String,
     pub user: Userid,
     pub chunk_size: u64,
@@ -221,6 +222,7 @@ pub extern "C" fn proxmox_backup_new(
 
         let setup = BackupSetup {
             host: repo.host().to_owned(),
+            port: repo.port(),
             user: repo.user().to_owned(),
             store: repo.store().to_owned(),
             chunk_size: if chunk_size > 0 { chunk_size } else { PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE },
@@ -693,6 +695,7 @@ pub extern "C" fn proxmox_restore_new(
 
         let setup = BackupSetup {
             host: repo.host().to_owned(),
+            port: repo.port(),
             user: repo.user().to_owned(),
             store: repo.store().to_owned(),
             chunk_size: PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, // not used by restore

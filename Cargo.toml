@@ -23,8 +23,8 @@ lazy_static = "1.4"
 libc = "0.2"
 once_cell = "1.3.1"
 openssl = "0.10"
-proxmox = { version = "0.4.1", features = [ "sortable-macro", "api-macro" ] }
-proxmox-backup = { git = "git://git.proxmox.com/git/proxmox-backup.git", tag = "v0.8.21" }
+proxmox = { version = "0.4.3", features = [ "sortable-macro", "api-macro" ] }
+proxmox-backup = { git = "git://git.proxmox.com/git/proxmox-backup.git", tag = "v0.9.1" }
 #proxmox-backup = { path = "../proxmox-backup" }
 serde_json = "1.0"
 tokio = { version = "0.2.9", features = [ "blocking", "fs", "io-util", "macros", "rt-threaded", "signal", "stream", "tcp", "time", "uds" ] }
