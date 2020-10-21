@@ -203,6 +203,7 @@ impl BackupTask {
             Some(ref manifest) => {
                 check_last_incremental_csum(Arc::clone(manifest), &device_name, size)
                     && check_last_encryption_mode(Arc::clone(manifest), &device_name, self.crypt_mode)
+                    && check_last_encryption_key(self.crypt_config.clone())
             },
             None => false,
         }

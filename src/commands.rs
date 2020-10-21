@@ -19,6 +19,10 @@ lazy_static!{
     static ref PREVIOUS_CSUMS: Mutex<HashMap<String, [u8;32]>> = {
         Mutex::new(HashMap::new())
     };
+
+    static ref PREVIOUS_CRYPT_CONFIG_DIGEST: Mutex<Option<[u8;32]>> = {
+        Mutex::new(None)
+    };
 }
 
 pub struct ImageUploadInfo {
@@ -82,6 +86,15 @@ fn archive_name(device_name: &str) -> String {
     format!("{}.img.fidx", device_name)
 }
 
+const CRYPT_CONFIG_HASH_INPUT:&[u8] = b"this is just a static string to protect against key changes";
+
+/// Create an identifying digest for the crypt config
+pub(crate) fn crypt_config_digest(
+    config: Arc<CryptConfig>,
+) -> [u8;32] {
+    config.compute_digest(CRYPT_CONFIG_HASH_INPUT)
+}
+
 pub(crate) fn check_last_incremental_csum(
     manifest: Arc<BackupManifest>,
     device_name: &str,
@@ -110,6 +123,19 @@ pub(crate) fn check_last_encryption_mode(
                 (CryptMode::None, _) => true,
             }
         },
+        _ => false,
+    }
+}
+
+pub(crate) fn check_last_encryption_key(
+    config: Option<Arc<CryptConfig>>,
+) -> bool {
+    let digest_guard = PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
+    match (*digest_guard, config)  {
+        (Some(last_digest), Some(current_config)) => {
+            crypt_config_digest(current_config) == last_digest
+        },
+        (None, None) => true,
         _ => false,
     }
 }
@@ -392,6 +418,16 @@ pub(crate) async fn finish_backup(
         guard.to_string(crypt_config.as_ref().map(Arc::as_ref))
             .map_err(|err| format_err!("unable to format manifest - {}", err))?
     };
+
+    {
+        let crypt_config_digest = match crypt_config {
+            Some(current_config) => Some(crypt_config_digest(current_config)),
+            None => None,
+        };
+
+        let mut crypt_config_digest_guard = PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
+        *crypt_config_digest_guard = crypt_config_digest;
+    }
 
     client
         .upload_blob_from_data(manifest.into_bytes(), MANIFEST_BLOB_NAME, true, false)
