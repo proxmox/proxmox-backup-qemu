@@ -967,3 +967,37 @@ pub extern "C" fn proxmox_restore_read_image_at_async(
         callback_info.send_result(result);
     });
 }
+
+/// Serialize all state data into a byte buffer. Can be loaded again with
+/// proxmox_import_state. Use for migration for example.
+///
+/// Length of the returned buffer is written to buf_size. Returned buffer must
+/// be freed with proxmox_free_state_buf.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_export_state(buf_size: *mut usize) -> *mut u8 {
+    let data = commands::serialize_state().into_boxed_slice();
+    unsafe { *buf_size = data.len(); }
+    Box::leak(data).as_mut_ptr()
+}
+
+/// Load state serialized by proxmox_export_state. If loading fails, a message
+/// will be logged to stderr, but the function will not fail.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_import_state(buf: *const u8, buf_size: usize) {
+    let data = unsafe { std::slice::from_raw_parts(buf, buf_size) };
+    // ignore errors, just log what happened
+    if let Err(err) = commands::deserialize_state(data) {
+        eprintln!("error deserializing PBS state - {}", err);
+    }
+}
+
+/// Free a buffer acquired from proxmox_export_state.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_free_state_buf(buf: *mut u8) {
+    if !buf.is_null() {
+        unsafe { Box::from_raw(buf); }
+    }
+}

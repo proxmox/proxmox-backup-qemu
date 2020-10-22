@@ -16,6 +16,9 @@ use crate::upload_queue::*;
 use lazy_static::lazy_static;
 
 lazy_static!{
+    // Note: Any state stored here that needs to be sent along with migration
+    // needs to be specified in (de)serialize_state as well!
+
     static ref PREVIOUS_CSUMS: Mutex<HashMap<String, [u8;32]>> = {
         Mutex::new(HashMap::new())
     };
@@ -32,6 +35,22 @@ pub struct ImageUploadInfo {
     device_size: u64,
     upload_queue: Option<UploadQueueSender>,
     upload_result: Option<UploadResultReceiver>,
+}
+
+
+pub(crate) fn serialize_state() -> Vec<u8> {
+    let prev_csums = &*PREVIOUS_CSUMS.lock().unwrap();
+    let prev_crypt_digest = &*PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
+    bincode::serialize(&(prev_csums, prev_crypt_digest)).unwrap()
+}
+
+pub(crate) fn deserialize_state(data: &[u8]) -> Result<(), Error> {
+    let (prev_csums, prev_crypt_digest) = bincode::deserialize(data)?;
+    let mut prev_csums_guard = PREVIOUS_CSUMS.lock().unwrap();
+    let mut prev_crypt_digest_guard = PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
+    *prev_csums_guard = prev_csums;
+    *prev_crypt_digest_guard = prev_crypt_digest;
+    Ok(())
 }
 
 

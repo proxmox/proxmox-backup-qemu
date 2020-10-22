@@ -264,6 +264,26 @@ void proxmox_backup_write_data_async(ProxmoxBackupHandle *handle,
                                      char **error);
 
 /**
+ * Serialize all state data into a byte buffer. Can be loaded again with
+ * proxmox_import_state. Use for migration for example.
+ *
+ * Length of the returned buffer is written to buf_size. Returned buffer must
+ * be freed with proxmox_free_state_buf.
+ */
+uint8_t *proxmox_export_state(uintptr_t *buf_size);
+
+/**
+ * Free a buffer acquired from proxmox_export_state.
+ */
+void proxmox_free_state_buf(uint8_t *buf);
+
+/**
+ * Load state serialized by proxmox_export_state. If loading fails, a message
+ * will be logged to stderr, but the function will not fail.
+ */
+void proxmox_import_state(const uint8_t *buf, uintptr_t buf_size);
+
+/**
  * Open connection to the backup server (sync)
  *
  * Returns:
