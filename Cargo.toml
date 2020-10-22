@@ -3,6 +3,10 @@ name = "proxmox-backup-qemu"
 version = "0.7.0"
 authors = [
     "Dietmar Maurer <dietmar@proxmox.com>",
+    "Dominik Csapak <d.csapak@proxmox.com>",
+    "Fabian Grünbichler <f.gruenbichler@proxmox.com>",
+    "Stefan Reiter <s.reiter@proxmox.com>",
+    "Thomas Lamprecht <t.lamprecht@proxmox.com>",
     "Wolfgang Bumiller <w.bumiller@proxmox.com>",
 ]
 edition = "2018"
