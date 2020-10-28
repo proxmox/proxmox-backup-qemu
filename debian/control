@@ -3,6 +3,8 @@ Section: admin
 Priority: optional
 Maintainer: Proxmox Support Team <support@proxmox.com>
 Build-Depends: debhelper (>= 10),
+               librust-bincode-dev (>= 1.0),
+               librust-proxmox-dev (>= 0.5),
 Standards-Version: 3.9.5
 Homepage: https://www.proxmox.com
 
