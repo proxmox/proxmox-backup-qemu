@@ -1,3 +1,15 @@
+proxmox-backup-qemu (0.7.1-1) unstable; urgency=medium
+
+  * update dependencies to proxmox-backup 0.9.1
+
+  * pass along any port set in the repository string
+
+  * invalidate bitmap when crypto key changes
+
+  * add state serializing and loading helper functions
+
+ -- Proxmox Support Team <support@proxmox.com>  Wed, 28 Oct 2020 22:08:25 +0100
+
 proxmox-backup-qemu (0.7.0-1) unstable; urgency=medium
 
   * use updated dependencies to improve server <-> client TCP throughput
