@@ -7,7 +7,7 @@ use std::os::raw::{c_uchar, c_char, c_int, c_void, c_long};
 use std::sync::{Arc, Mutex, Condvar};
 
 use proxmox::try_block;
-use proxmox_backup::api2::types::Userid;
+use proxmox_backup::api2::types::Authid;
 use proxmox_backup::backup::{CryptMode, BackupDir};
 use proxmox_backup::client::BackupRepository;
 
@@ -116,7 +116,7 @@ pub(crate) struct BackupSetup {
     pub host: String,
     pub port: u16,
     pub store: String,
-    pub user: Userid,
+    pub auth_id: Authid,
     pub chunk_size: u64,
     pub backup_type: String,
     pub backup_id: String,
@@ -223,7 +223,7 @@ pub extern "C" fn proxmox_backup_new(
         let setup = BackupSetup {
             host: repo.host().to_owned(),
             port: repo.port(),
-            user: repo.user().to_owned(),
+            auth_id: repo.auth_id().to_owned(),
             store: repo.store().to_owned(),
             chunk_size: if chunk_size > 0 { chunk_size } else { PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE },
             backup_type: String::from("vm"),
@@ -696,7 +696,7 @@ pub extern "C" fn proxmox_restore_new(
         let setup = BackupSetup {
             host: repo.host().to_owned(),
             port: repo.port(),
-            user: repo.user().to_owned(),
+            auth_id: repo.auth_id().to_owned(),
             store: repo.store().to_owned(),
             chunk_size: PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, // not used by restore
             backup_type,

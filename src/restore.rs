@@ -80,7 +80,7 @@ impl RestoreTask {
             .fingerprint(self.setup.fingerprint.clone())
             .password(self.setup.password.clone());
 
-        let http = HttpClient::new(&self.setup.host, self.setup.port, &self.setup.user, options)?;
+        let http = HttpClient::new(&self.setup.host, self.setup.port, &self.setup.auth_id, options)?;
         let client = BackupReader::start(
             http,
             self.crypt_config.clone(),
