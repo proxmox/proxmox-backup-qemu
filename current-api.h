@@ -32,6 +32,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define PROXMOX_BACKUP_QEMU_VERSION "0.7.1 (dbb900ce4f524af2b59c59727203633588f32804)"
+
 #define PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE ((1024 * 1024) * 4)
 
 /**

@@ -3,7 +3,7 @@ include /usr/share/dpkg/default.mk
 PACKAGE=libproxmox-backup-qemu0
 
 ARCH:=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
-GITVERSION:=$(shell git rev-parse HEAD)
+export GITVERSION:=$(shell git rev-parse HEAD)
 
 MAIN_DEB=${PACKAGE}_${DEB_VERSION}_${ARCH}.deb
 OTHER_DEBS=						\
@@ -20,7 +20,7 @@ endif
 all:
 ifneq ($(BUILD_MODE), skip)
 	cargo build $(CARGO_BUILD_ARGS)
-	diff -up current-api.h proxmox-backup-qemu.h
+	diff -I 'PROXMOX_BACKUP_QEMU_VERSION' -up current-api.h proxmox-backup-qemu.h
 endif
 
 # always re-create this dir
@@ -29,7 +29,7 @@ endif
 build:
 	rm -rf build
 	cargo build --release
-	diff -up current-api.h proxmox-backup-qemu.h
+	diff -I 'PROXMOX_BACKUP_QEMU_VERSION' -up current-api.h proxmox-backup-qemu.h
 	rsync -a debian Makefile Cargo.toml Cargo.lock build.rs proxmox-backup-qemu.h src target current-api.h build/
 
 .PHONY: install
