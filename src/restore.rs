@@ -92,6 +92,7 @@ impl RestoreTask {
         ).await?;
 
         let (manifest, _) = client.download_manifest().await?;
+        manifest.check_fingerprint(self.crypt_config.as_ref().map(Arc::as_ref))?;
 
         self.manifest.set(Arc::new(manifest))
             .map_err(|_| format_err!("already connected!"))?;
