@@ -41,7 +41,7 @@ impl RestoreTask {
         let crypt_config = match setup.keyfile {
             None => None,
             Some(ref path) => {
-                let (key, _) = load_and_decrypt_key(path, & || {
+                let (key, _, _) = load_and_decrypt_key(path, & || {
                     match setup.key_password {
                         Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
                         None => bail!("no key_password specified"),
