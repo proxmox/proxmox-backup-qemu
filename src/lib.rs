@@ -28,6 +28,19 @@ mod tools;
 
 pub const PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE: u64 = 1024*1024*4;
 
+use lazy_static::lazy_static;
+lazy_static!{
+    static ref VERSION_CSTR: CString = {
+        CString::new(env!("PBS_LIB_VERSION")).unwrap()
+    };
+}
+
+/// Return a read-only pointer to a string containing the version of the library.
+#[no_mangle]
+pub extern "C" fn proxmox_backup_qemu_version() -> *const c_char {
+    VERSION_CSTR.as_ptr()
+}
+
 /// Free returned error messages
 ///
 /// All calls can return error messages, but they are allocated using

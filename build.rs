@@ -12,8 +12,8 @@ fn main() {
         Some(ver) if !ver.is_empty() => ver,
         _ => "UNKNOWN",
     };
-    let version_define = format!(
-        "\n#define PROXMOX_BACKUP_QEMU_VERSION \"{} ({})\"",
+    let version_string = format!(
+        "{} ({})",
         crate_ver,
         git_ver,
     );
@@ -23,10 +23,10 @@ fn main() {
         .with_crate(&crate_dir)
         .with_header(header)
         .with_include_guard("PROXMOX_BACKUP_QEMU_H")
-        .with_after_include(version_define)
         .generate()
         .unwrap()
         .write_to_file("proxmox-backup-qemu.h");
 
     println!("cargo:rustc-cdylib-link-arg=-Wl,-soname,libproxmox_backup_qemu.so.0");
+    println!("cargo:rustc-env=PBS_LIB_VERSION={}", version_string);
 }

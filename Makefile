@@ -20,7 +20,7 @@ endif
 all:
 ifneq ($(BUILD_MODE), skip)
 	cargo build $(CARGO_BUILD_ARGS)
-	diff -I 'PROXMOX_BACKUP_QEMU_VERSION' -up current-api.h proxmox-backup-qemu.h
+	diff -up current-api.h proxmox-backup-qemu.h
 endif
 
 # always re-create this dir

@@ -32,8 +32,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define PROXMOX_BACKUP_QEMU_VERSION "0.7.1 (dbb900ce4f524af2b59c59727203633588f32804)"
-
 #define PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE ((1024 * 1024) * 4)
 
 /**
@@ -182,6 +180,11 @@ ProxmoxBackupHandle *proxmox_backup_new(const char *repo,
                                         bool encrypt,
                                         const char *fingerprint,
                                         char **error);
+
+/**
+ * Return a read-only pointer to a string containing the version of the library.
+ */
+const char *proxmox_backup_qemu_version(void);
 
 /**
  * Register a backup image (sync)
