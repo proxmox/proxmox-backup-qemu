@@ -108,6 +108,8 @@ fn archive_name(device_name: &str) -> String {
 const CRYPT_CONFIG_HASH_INPUT:&[u8] = b"this is just a static string to protect against key changes";
 
 /// Create an identifying digest for the crypt config
+/// legacy version for VMs freshly migrated from old version
+/// TODO: remove in PVE 7.0
 pub(crate) fn crypt_config_digest(
     config: Arc<CryptConfig>,
 ) -> [u8;32] {
@@ -152,7 +154,8 @@ pub(crate) fn check_last_encryption_key(
     let digest_guard = PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
     match (*digest_guard, config)  {
         (Some(last_digest), Some(current_config)) => {
-            crypt_config_digest(current_config) == last_digest
+            current_config.fingerprint().bytes() == &last_digest
+                || crypt_config_digest(current_config) == last_digest
         },
         (None, None) => true,
         _ => false,
@@ -440,7 +443,13 @@ pub(crate) async fn finish_backup(
 
     {
         let crypt_config_digest = match crypt_config {
-            Some(current_config) => Some(crypt_config_digest(current_config)),
+            Some(current_config) => {
+                let fp = current_config
+                    .fingerprint()
+                    .bytes()
+                    .to_owned();
+                Some(fp)
+            },
             None => None,
         };
 
