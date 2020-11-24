@@ -23,7 +23,7 @@ lazy_static!{
         Mutex::new(HashMap::new())
     };
 
-    static ref PREVIOUS_CRYPT_CONFIG_DIGEST: Mutex<Option<[u8;32]>> = {
+    static ref PREVIOUS_KEY_FINGERPRINT: Mutex<Option<[u8;32]>> = {
         Mutex::new(None)
     };
 }
@@ -40,16 +40,16 @@ pub struct ImageUploadInfo {
 
 pub(crate) fn serialize_state() -> Vec<u8> {
     let prev_csums = &*PREVIOUS_CSUMS.lock().unwrap();
-    let prev_crypt_digest = &*PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
-    bincode::serialize(&(prev_csums, prev_crypt_digest)).unwrap()
+    let prev_key_fingerprint = &*PREVIOUS_KEY_FINGERPRINT.lock().unwrap();
+    bincode::serialize(&(prev_csums, prev_key_fingerprint)).unwrap()
 }
 
 pub(crate) fn deserialize_state(data: &[u8]) -> Result<(), Error> {
-    let (prev_csums, prev_crypt_digest) = bincode::deserialize(data)?;
+    let (prev_csums, prev_key_fingerprint) = bincode::deserialize(data)?;
     let mut prev_csums_guard = PREVIOUS_CSUMS.lock().unwrap();
-    let mut prev_crypt_digest_guard = PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
+    let mut prev_key_fingerprint_guard = PREVIOUS_KEY_FINGERPRINT.lock().unwrap();
     *prev_csums_guard = prev_csums;
-    *prev_crypt_digest_guard = prev_crypt_digest;
+    *prev_key_fingerprint_guard = prev_key_fingerprint;
     Ok(())
 }
 
@@ -151,11 +151,11 @@ pub(crate) fn check_last_encryption_mode(
 pub(crate) fn check_last_encryption_key(
     config: Option<Arc<CryptConfig>>,
 ) -> bool {
-    let digest_guard = PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
-    match (*digest_guard, config)  {
-        (Some(last_digest), Some(current_config)) => {
-            current_config.fingerprint().bytes() == &last_digest
-                || crypt_config_digest(current_config) == last_digest
+    let fingerprint_guard = PREVIOUS_KEY_FINGERPRINT.lock().unwrap();
+    match (*fingerprint_guard, config)  {
+        (Some(last_fingerprint), Some(current_config)) => {
+            current_config.fingerprint().bytes() == &last_fingerprint
+                || crypt_config_digest(current_config) == last_fingerprint
         },
         (None, None) => true,
         _ => false,
@@ -442,7 +442,7 @@ pub(crate) async fn finish_backup(
     };
 
     {
-        let crypt_config_digest = match crypt_config {
+        let key_fingerprint = match crypt_config {
             Some(current_config) => {
                 let fp = current_config
                     .fingerprint()
@@ -453,8 +453,8 @@ pub(crate) async fn finish_backup(
             None => None,
         };
 
-        let mut crypt_config_digest_guard = PREVIOUS_CRYPT_CONFIG_DIGEST.lock().unwrap();
-        *crypt_config_digest_guard = crypt_config_digest;
+        let mut key_fingerprint_guard = PREVIOUS_KEY_FINGERPRINT.lock().unwrap();
+        *key_fingerprint_guard = key_fingerprint;
     }
 
     client
