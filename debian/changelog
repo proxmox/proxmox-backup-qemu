@@ -1,3 +1,13 @@
+proxmox-backup-qemu (1.0.1-1) unstable; urgency=medium
+
+  * depend on proxmox-backup v1.0.3
+
+  * restore: improve error if key is missing
+
+  * adapt to proxmox-backup fingerprint changes
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 24 Nov 2020 09:09:03 +0100
+
 proxmox-backup-qemu (1.0.0-1) unstable; urgency=medium
 
   * update dependencies to proxmox-backup 1.0.1
