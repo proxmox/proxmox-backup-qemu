@@ -1,3 +1,13 @@
+proxmox-backup-qemu (1.0.2-1) unstable; urgency=medium
+
+  * return version via rust fn instead of header define
+
+  * encryption key tracking: use fingerprint
+
+  * depend on proxmox-backup v1.0.4
+
+ -- Proxmox Support Team <support@proxmox.com>  Wed, 25 Nov 2020 08:32:28 +0100
+
 proxmox-backup-qemu (1.0.1-1) unstable; urgency=medium
 
   * depend on proxmox-backup v1.0.3
