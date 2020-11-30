@@ -2,7 +2,8 @@ Source: proxmox-backup-qemu
 Section: admin
 Priority: optional
 Maintainer: Proxmox Support Team <support@proxmox.com>
-Build-Depends: debhelper (>= 10),
+Build-Depends: cbindgen,
+               debhelper (>= 10),
                librust-bincode-dev (>= 1.0),
                librust-proxmox-dev (>= 0.7),
 Standards-Version: 3.9.5
@@ -10,14 +11,15 @@ Homepage: https://www.proxmox.com
 
 Package: libproxmox-backup-qemu0
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
 Description: Proxmox Backup Server client library for QEMU
  This library contains the library to access the Proxmox Backup server from
  within QEMU.
 
 Package: libproxmox-backup-qemu0-dev
 Architecture: any
-Depends:  libproxmox-backup-qemu0
+Depends: libproxmox-backup-qemu0,
 Description: Proxmox Backup Server client library for QEMU development files
  This library contains the library to access the Proxmox Backup server from
  within QEMU.
