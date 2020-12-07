@@ -4,8 +4,8 @@ use std::convert::TryInto;
 
 use anyhow::{format_err, bail, Error};
 use once_cell::sync::OnceCell;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::runtime::Runtime;
-use tokio::prelude::*;
 
 use proxmox_backup::tools::runtime::get_runtime_with_builder;
 use proxmox_backup::backup::*;
@@ -63,11 +63,10 @@ impl RestoreTask {
 
     pub fn new(setup: BackupSetup) -> Result<Self, Error> {
         let runtime = get_runtime_with_builder(|| {
-            let mut builder = tokio::runtime::Builder::new();
-            builder.threaded_scheduler();
+            let mut builder = tokio::runtime::Builder::new_multi_thread();
             builder.enable_all();
-            builder.max_threads(6);
-            builder.core_threads(4);
+            builder.max_blocking_threads(2);
+            builder.worker_threads(4);
             builder.thread_name("proxmox-restore-worker");
             builder
         });

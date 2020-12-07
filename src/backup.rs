@@ -73,11 +73,10 @@ impl BackupTask {
 
     pub fn new(setup: BackupSetup, compress: bool, crypt_mode: CryptMode) -> Result<Self, Error> {
         let runtime = get_runtime_with_builder(|| {
-            let mut builder = tokio::runtime::Builder::new();
-            builder.threaded_scheduler();
+            let mut builder = tokio::runtime::Builder::new_multi_thread();
             builder.enable_all();
-            builder.max_threads(6);
-            builder.core_threads(4);
+            builder.max_blocking_threads(2);
+            builder.worker_threads(4);
             builder.thread_name("proxmox-backup-worker");
             builder
         });
@@ -269,7 +268,7 @@ impl BackupTask {
 
 fn abortable_command<'a, F: 'a + Send + Future<Output=Result<c_int, Error>>>(
     command_future: F,
-    abort_future: impl 'a + Send + Future<Output=Result<(), tokio::sync::broadcast::RecvError>>,
+    abort_future: impl 'a + Send + Future<Output=Result<(), tokio::sync::broadcast::error::RecvError>>,
 ) -> impl 'a + Future<Output = Result<c_int, Error>> {
 
     futures::future::select(command_future.boxed(), abort_future.boxed())
