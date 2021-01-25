@@ -134,7 +134,7 @@ pub(crate) struct BackupSetup {
     pub backup_type: String,
     pub backup_id: String,
     pub backup_time: i64,
-    pub password: Option<String>,
+    pub password: String,
     pub keyfile: Option<std::path::PathBuf>,
     pub key_password: Option<String>,
     pub fingerprint: Option<String>,
@@ -222,7 +222,8 @@ pub extern "C" fn proxmox_backup_new(
         let backup_id = tools::utf8_c_string(backup_id)?
             .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
 
-        let password = tools::utf8_c_string(password)?;
+        let password = tools::utf8_c_string(password)?
+            .ok_or_else(|| format_err!("password must not be NULL"))?;
         let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
         let key_password = tools::utf8_c_string(key_password)?;
         let fingerprint = tools::utf8_c_string(fingerprint)?;
@@ -701,7 +702,8 @@ pub extern "C" fn proxmox_restore_new(
         let backup_id = snapshot.group().backup_id().to_owned();
         let backup_time = snapshot.backup_time();
 
-        let password = tools::utf8_c_string(password)?;
+        let password = tools::utf8_c_string(password)?
+            .ok_or_else(|| format_err!("password must not be null"))?;
         let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
         let key_password = tools::utf8_c_string(key_password)?;
         let fingerprint = tools::utf8_c_string(fingerprint)?;

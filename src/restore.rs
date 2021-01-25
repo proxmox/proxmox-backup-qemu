@@ -75,9 +75,10 @@ impl RestoreTask {
 
     pub async fn connect(&self) -> Result<libc::c_int, Error> {
 
-        let options = HttpClientOptions::new()
-            .fingerprint(self.setup.fingerprint.clone())
-            .password(self.setup.password.clone());
+        let options = HttpClientOptions::new_non_interactive(
+            self.setup.password.clone(),
+            self.setup.fingerprint.clone(),
+        );
 
         let http = HttpClient::new(&self.setup.host, self.setup.port, &self.setup.auth_id, options)?;
         let client = BackupReader::start(

@@ -107,9 +107,10 @@ impl BackupTask {
         self.check_aborted()?;
 
         let command_future = async  {
-            let options = HttpClientOptions::new()
-                .fingerprint(self.setup.fingerprint.clone())
-                .password(self.setup.password.clone());
+            let options = HttpClientOptions::new_non_interactive(
+                self.setup.password.clone(),
+                self.setup.fingerprint.clone(),
+            );
 
             let http = HttpClient::new(&self.setup.host, self.setup.port, &self.setup.auth_id, options)?;
             let writer = BackupWriter::start(
