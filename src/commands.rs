@@ -93,7 +93,13 @@ pub(crate) async fn add_config(
 
     let blob_name = format!("{}.blob", name);
 
-    let stats = client.upload_blob_from_data(data, &blob_name, compress, crypt_mode == CryptMode::Encrypt).await?;
+    let options = UploadOptions {
+        compress,
+        encrypt: crypt_mode == CryptMode::Encrypt,
+        ..UploadOptions::default()
+    };
+
+    let stats = client.upload_blob_from_data(data, &blob_name, options).await?;
 
     let mut guard = manifest.lock().unwrap();
     guard.add_file(blob_name, stats.size, stats.csum, crypt_mode)?;
@@ -457,8 +463,13 @@ pub(crate) async fn finish_backup(
         *key_fingerprint_guard = key_fingerprint;
     }
 
+    let options = UploadOptions {
+        compress: true,
+        ..UploadOptions::default()
+    };
+
     client
-        .upload_blob_from_data(manifest.into_bytes(), MANIFEST_BLOB_NAME, true, false)
+        .upload_blob_from_data(manifest.into_bytes(), MANIFEST_BLOB_NAME, options)
         .await?;
 
     client.finish().await?;
