@@ -438,8 +438,18 @@ pub(crate) async fn write_data(
 pub(crate) async fn finish_backup(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
+    rsa_encrypted_key: Option<Vec<u8>>,
     manifest: Arc<Mutex<BackupManifest>>,
 ) -> Result<c_int, Error> {
+    if let Some(rsa_encrypted_key) = rsa_encrypted_key {
+        let target = ENCRYPTED_KEY_BLOB_NAME;
+        let options = UploadOptions { compress: false, encrypt: false, ..UploadOptions::default() };
+        let stats = client
+            .upload_blob_from_data(rsa_encrypted_key, target, options)
+            .await?;
+        manifest.lock().unwrap().add_file(target.to_string(), stats.size, stats.csum, CryptMode::Encrypt)?;
+    };
+
 
     let manifest = {
         let guard = manifest.lock().unwrap();

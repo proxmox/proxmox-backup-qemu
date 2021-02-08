@@ -137,6 +137,7 @@ pub(crate) struct BackupSetup {
     pub password: String,
     pub keyfile: Option<std::path::PathBuf>,
     pub key_password: Option<String>,
+    pub master_keyfile: Option<std::path::PathBuf>,
     pub fingerprint: Option<String>,
 }
 
@@ -208,6 +209,7 @@ pub extern "C" fn proxmox_backup_new(
     password: *const c_char,
     keyfile: *const c_char,
     key_password: *const c_char,
+    master_keyfile: *const c_char,
     compress: bool,
     encrypt: bool,
     fingerprint: *const c_char,
@@ -227,6 +229,11 @@ pub extern "C" fn proxmox_backup_new(
         let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
         let key_password = tools::utf8_c_string(key_password)?;
         let fingerprint = tools::utf8_c_string(fingerprint)?;
+        let master_keyfile = tools::utf8_c_string(master_keyfile)?.map(std::path::PathBuf::from);
+
+        if master_keyfile.is_some() && keyfile.is_none() {
+            return Err(format_err!("can't use master keyfile without keyfile"));
+        }
 
         let crypt_mode = if keyfile.is_some() {
             if encrypt { CryptMode::Encrypt } else {  CryptMode::SignOnly }
@@ -246,6 +253,7 @@ pub extern "C" fn proxmox_backup_new(
             backup_time: backup_time as i64,
             keyfile,
             key_password,
+            master_keyfile,
             fingerprint,
         };
 
@@ -720,6 +728,7 @@ pub extern "C" fn proxmox_restore_new(
             backup_time,
             keyfile,
             key_password,
+            master_keyfile: None,
             fingerprint,
         };
 

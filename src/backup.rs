@@ -8,8 +8,10 @@ use futures::future::{Future, Either, FutureExt};
 use tokio::runtime::Runtime;
 
 use proxmox_backup::tools::runtime::get_runtime_with_builder;
-use proxmox_backup::backup::{CryptConfig, CryptMode, BackupDir, BackupManifest, load_and_decrypt_key};
+use proxmox_backup::backup::{CryptConfig, CryptMode, BackupDir, BackupManifest, KeyConfig, load_and_decrypt_key, rsa_encrypt_key_config};
 use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupWriter};
+
+use proxmox::tools::fs::file_get_contents;
 
 use super::BackupSetup;
 use crate::capi_types::*;
@@ -22,6 +24,7 @@ pub(crate) struct BackupTask {
     compress: bool,
     crypt_mode: CryptMode,
     crypt_config: Option<Arc<CryptConfig>>,
+    rsa_encrypted_key: Option<Vec<u8>>,
     writer: OnceCell<Arc<BackupWriter>>,
     last_manifest: OnceCell<Arc<BackupManifest>>,
     manifest: Arc<Mutex<BackupManifest>>,
@@ -44,16 +47,28 @@ impl BackupTask {
         runtime: Arc<Runtime>
     ) -> Result<Self, Error> {
 
-        let crypt_config = match setup.keyfile {
-            None => None,
+        let (crypt_config, rsa_encrypted_key) = match setup.keyfile {
+            None => (None, None),
             Some(ref path) => {
-                let (key, _, _) = load_and_decrypt_key(path, & || {
+                let (key, created, _) = load_and_decrypt_key(path, & || {
                     match setup.key_password {
                         Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
                         None => bail!("no key_password specified"),
                     }
                 })?;
-                Some(Arc::new(CryptConfig::new(key)?))
+                let rsa_encrypted_key = match setup.master_keyfile {
+                    Some(ref master_keyfile) => {
+                        let pem = file_get_contents(master_keyfile)?;
+                        let rsa = openssl::rsa::Rsa::public_key_from_pem(&pem)?;
+
+                        let mut key_config = KeyConfig::without_password(key)?;
+                        key_config.created = created; // keep original value
+
+                        Some(rsa_encrypt_key_config(rsa, &key_config)?)
+                    },
+                    None => None,
+                };
+                (Some(Arc::new(CryptConfig::new(key)?)), rsa_encrypted_key)
             }
         };
 
@@ -65,10 +80,21 @@ impl BackupTask {
         let registry = Arc::new(Mutex::new(Registry::<ImageUploadInfo>::new()));
         let known_chunks = Arc::new(Mutex::new(HashSet::new()));
 
-        Ok(Self { runtime, setup, compress, crypt_mode, crypt_config, abort,
-                  registry, manifest, known_chunks,
-                  writer: OnceCell::new(), last_manifest: OnceCell::new(),
-                  aborted: OnceCell::new() })
+        Ok(Self {
+            runtime,
+            setup,
+            compress,
+            crypt_mode,
+            crypt_config,
+            rsa_encrypted_key,
+            abort,
+            registry,
+            manifest,
+            known_chunks,
+            writer: OnceCell::new(),
+            last_manifest: OnceCell::new(),
+            aborted: OnceCell::new()
+        })
     }
 
     pub fn new(setup: BackupSetup, compress: bool, crypt_mode: CryptMode) -> Result<Self, Error> {
@@ -258,6 +284,7 @@ impl BackupTask {
         let command_future = finish_backup(
             self.need_writer()?,
             self.crypt_config.clone(),
+            self.rsa_encrypted_key.clone(),
             Arc::clone(&self.manifest),
         );
 
