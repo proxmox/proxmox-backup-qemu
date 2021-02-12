@@ -11,7 +11,7 @@ libproxmox_backup_qemu.so.0 libproxmox-backup-qemu0 #MINVER#
  proxmox_backup_finish@Base 1.0.0
  proxmox_backup_finish_async@Base 1.0.0
  proxmox_backup_free_error@Base 1.0.0
- proxmox_backup_new@Base 1.0.0
+ proxmox_backup_new@Base 1.0.3
  proxmox_backup_qemu_version@Base 1.0.2
  proxmox_backup_register_image@Base 1.0.0
  proxmox_backup_register_image_async@Base 1.0.0
