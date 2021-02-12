@@ -13,6 +13,7 @@ Package: libproxmox-backup-qemu0
 Architecture: any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+Breaks: pve-qemu-kvm (<< 5.2.0-1)
 Description: Proxmox Backup Server client library for QEMU
  This library contains the library to access the Proxmox Backup server from
  within QEMU.
