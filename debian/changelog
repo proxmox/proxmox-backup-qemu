@@ -1,3 +1,13 @@
+proxmox-backup-qemu (1.0.3-1) unstable; urgency=medium
+
+  * update async framework tokio to version 1.0
+
+  * api: add master key support
+
+  * ship library symbols for depednency tracking
+
+ -- Proxmox Support Team <support@proxmox.com>  Fri, 12 Feb 2021 10:58:58 +0100
+
 proxmox-backup-qemu (1.0.2-1) unstable; urgency=medium
 
   * return version via rust fn instead of header define
