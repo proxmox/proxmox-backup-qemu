@@ -8,3 +8,7 @@ export BUILD_MODE=skip
 %:
 	dh $@
 
+override_dh_strip:
+	dh_strip
+	debian/scripts/elf-strip-unused-dependencies.sh \
+	 "debian/libproxmox-backup-qemu0/usr/lib/libproxmox_backup_qemu.so.0"
