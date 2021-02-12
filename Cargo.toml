@@ -25,9 +25,9 @@ futures = "0.3"
 h2 = { version = "0.3", features = [ "stream" ] }
 lazy_static = "1.4"
 libc = "0.2"
-once_cell = "1.3.1"
+once_cell = "1.5"
 openssl = "0.10"
-proxmox = { version = "0.10.0", features = [ "sortable-macro", "api-macro" ] }
+proxmox = { version = "0.10.5", features = [ "sortable-macro", "api-macro" ] }
 #proxmox = { path = "../proxmox/proxmox" }
 proxmox-backup = { git = "git://git.proxmox.com/git/proxmox-backup.git", tag = "v1.0.8" }
 #proxmox-backup = { path = "../proxmox-backup" }
