@@ -1,10 +1,8 @@
 use std::sync::{Arc, Mutex};
-use std::io::SeekFrom;
 use std::convert::TryInto;
 
 use anyhow::{format_err, bail, Error};
 use once_cell::sync::OnceCell;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::runtime::Runtime;
 
 use proxmox_backup::tools::runtime::get_runtime_with_builder;
@@ -14,9 +12,10 @@ use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, Remote
 use super::BackupSetup;
 use crate::registry::Registry;
 use crate::capi_types::DataPointer;
+use crate::shared_cache::get_shared_chunk_cache;
 
 struct ImageAccessInfo {
-    reader: Arc<tokio::sync::Mutex<AsyncIndexReader<RemoteChunkReader, FixedIndexReader>>>,
+    reader: Arc<CachedChunkReader<FixedIndexReader, RemoteChunkReader>>,
     _archive_name: String,
     archive_size: u64,
 }
@@ -229,12 +228,13 @@ impl RestoreTask {
             most_used,
         );
 
-        let reader = AsyncIndexReader::new(index, chunk_reader);
+        let cache = get_shared_chunk_cache();
+        let reader = Arc::new(CachedChunkReader::new_with_cache(chunk_reader, index, cache));
 
         let info = ImageAccessInfo {
             archive_size,
             _archive_name: archive_name, /// useful to debug
-            reader: Arc::new(tokio::sync::Mutex::new(reader)),
+            reader,
         };
 
         (*self.image_registry.lock().unwrap()).register(info)
@@ -258,23 +258,9 @@ impl RestoreTask {
             bail!("read index {} out of bounds {}", offset, image_size);
         }
 
-        let mut reader = reader.lock().await;
-
-        let buf: &mut [u8] = unsafe { std::slice::from_raw_parts_mut(data.0 as *mut u8, size as usize)};
-        let mut read = 0;
-
-        while read < size {
-            reader.seek(SeekFrom::Start(offset + read)).await?;
-            let bytes = reader.read(&mut buf[read as usize..]).await?;
-
-            if bytes == 0 {
-                // EOF
-                break;
-            }
-
-            read += bytes as u64;
-        }
-
+        let buf: &mut [u8] =
+            unsafe { std::slice::from_raw_parts_mut(data.0 as *mut u8, size as usize) };
+        let read = reader.read_at(buf, offset).await?;
         Ok(read.try_into()?)
     }
 }
