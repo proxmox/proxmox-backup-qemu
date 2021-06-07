@@ -25,6 +25,7 @@ mod restore;
 use restore::*;
 
 mod tools;
+mod shared_cache;
 
 pub const PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE: u64 = 1024*1024*4;
 
@@ -804,7 +805,11 @@ pub extern "C" fn proxmox_restore_connect_async(
 pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) {
 
     let restore_task = handle as * mut Arc<RestoreTask>;
-    unsafe { Box::from_raw(restore_task) }; //drop(restore_task)
+    let restore_task = unsafe { Box::from_raw(restore_task) };
+    drop(restore_task);
+
+    // after dropping, cache may be unused (if no other handles open)
+    shared_cache::shared_chunk_cache_cleanup();
 }
 
 /// Restore an image (sync)
