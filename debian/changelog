@@ -1,4 +1,18 @@
-proxmox-backup-qemu (1.0.3-1) unstable; urgency=medium
+proxmox-backup-qemu (1.1.0-1) buster; urgency=medium
+
+  * Use the new CachedChunkReader with the shared_cache implementation to
+    provide a concurrency-safe async way of accessing data.
+
+  * drop a global read mutex, providing real concurrency without lock contention
+
+  * uses a shared LRU cache improving random-access, e.g., benefiting
+    live-restore
+
+  * depend on proxmox-backup v1.1.10
+
+ -- Proxmox Support Team <support@proxmox.com>  Wed, 16 Jun 2021 13:44:24 +0200
+
+proxmox-backup-qemu (1.0.3-1) stable; urgency=medium
 
   * update async framework tokio to version 1.0
 
