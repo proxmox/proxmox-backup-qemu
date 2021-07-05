@@ -1,3 +1,9 @@
+proxmox-backup-qemu (1.2.0-1) buster; urgency=medium
+
+  * update for bullseye
+
+ -- Proxmox Support Team <support@proxmox.com>  Mon, 05 Jul 2021 20:04:20 +0200
+
 proxmox-backup-qemu (1.1.0-1) buster; urgency=medium
 
   * Use the new CachedChunkReader with the shared_cache implementation to
