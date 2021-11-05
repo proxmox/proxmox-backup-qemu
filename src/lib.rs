@@ -6,10 +6,11 @@ use std::ptr;
 use std::os::raw::{c_uchar, c_char, c_int, c_void, c_long};
 use std::sync::{Arc, Mutex, Condvar};
 
-use proxmox::try_block;
-use proxmox_backup::api2::types::Authid;
-use proxmox_backup::backup::{CryptMode, BackupDir};
-use proxmox_backup::client::BackupRepository;
+use proxmox_lang::try_block;
+
+use pbs_api_types::{Authid, CryptMode};
+use pbs_datastore::BackupDir;
+use pbs_client::BackupRepository;
 
 mod capi_types;
 use capi_types::*;
@@ -841,7 +842,7 @@ pub extern "C" fn proxmox_restore_image(
             callback(callback_data, offset, std::ptr::null(), len)
         };
 
-        proxmox_backup::tools::runtime::block_on(
+        proxmox_async::runtime::block_on(
             restore_task.restore_image(archive_name, write_data_callback, write_zero_callback, verbose)
         )?;
 

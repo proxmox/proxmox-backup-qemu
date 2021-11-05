@@ -1,5 +1,5 @@
 use once_cell::sync::OnceCell;
-use proxmox_backup::tools::async_lru_cache::AsyncLruCache;
+use pbs_tools::async_lru_cache::AsyncLruCache;
 use std::sync::{Arc, Mutex};
 
 type ChunkCache = AsyncLruCache<[u8; 32], Arc<Vec<u8>>>;

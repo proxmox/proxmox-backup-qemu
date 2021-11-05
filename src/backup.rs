@@ -7,11 +7,14 @@ use std::os::raw::c_int;
 use futures::future::{Future, Either, FutureExt};
 use tokio::runtime::Runtime;
 
-use proxmox_backup::tools::runtime::get_runtime_with_builder;
-use proxmox_backup::backup::{CryptConfig, CryptMode, BackupDir, BackupManifest, KeyConfig, load_and_decrypt_key, rsa_encrypt_key_config};
-use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupWriter};
+use proxmox_sys::fs::file_get_contents;
+use proxmox_async::runtime::get_runtime_with_builder;
 
-use proxmox::tools::fs::file_get_contents;
+use pbs_api_types::CryptMode;
+use pbs_tools::crypt_config::CryptConfig;
+use pbs_config::key_config::{KeyConfig, load_and_decrypt_key, rsa_encrypt_key_config};
+use pbs_datastore::{BackupDir, BackupManifest,};
+use pbs_client::{HttpClient, HttpClientOptions, BackupWriter};
 
 use super::BackupSetup;
 use crate::capi_types::*;

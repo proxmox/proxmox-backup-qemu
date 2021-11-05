@@ -5,8 +5,10 @@ use std::sync::{Mutex, Arc};
 use futures::future::Future;
 use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
-use proxmox_backup::backup::*;
-use proxmox_backup::client::*;
+
+use pbs_datastore::index::IndexFile;
+use pbs_datastore::fixed_index::FixedIndexReader;
+use pbs_client::*;
 
 pub(crate) struct ChunkUploadInfo {
     pub digest: [u8; 32],
@@ -102,7 +104,7 @@ async fn upload_handler(
     while let Some(response_future) = upload_queue.recv().await {
         match response_future.await {
             Ok(ChunkUploadInfo { digest, offset, size, chunk_is_known }) => {
-                let digest_str = proxmox::tools::digest_to_hex(&digest);
+                let digest_str = hex::encode(&digest);
 
                 //println!("upload_handler {:?} {}", digest, offset);
                 let pos = (offset/chunk_size) as usize;

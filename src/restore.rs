@@ -5,9 +5,17 @@ use anyhow::{format_err, bail, Error};
 use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
 
-use proxmox_backup::tools::runtime::get_runtime_with_builder;
-use proxmox_backup::backup::*;
-use proxmox_backup::client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
+use proxmox_async::runtime::get_runtime_with_builder;
+
+use pbs_tools::crypt_config::CryptConfig;
+use pbs_config::key_config::load_and_decrypt_key;
+use pbs_datastore::BackupManifest;
+use pbs_datastore::index::IndexFile;
+use pbs_datastore::cached_chunk_reader::CachedChunkReader;
+use pbs_datastore::fixed_index::FixedIndexReader;
+use pbs_datastore::data_blob::DataChunkBuilder;
+use pbs_datastore::read_chunk::ReadChunk;
+use pbs_client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
 
 use super::BackupSetup;
 use crate::registry::Registry;

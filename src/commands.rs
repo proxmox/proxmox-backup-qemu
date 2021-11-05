@@ -6,12 +6,16 @@ use std::os::raw::c_int;
 use futures::future::{Future, TryFutureExt};
 use serde_json::json;
 
-use proxmox_backup::backup::*;
-use proxmox_backup::client::*;
+use pbs_api_types::CryptMode;
+use pbs_tools::crypt_config::CryptConfig;
+use pbs_datastore::index::IndexFile;
+use pbs_datastore::data_blob::DataChunkBuilder;
+use pbs_datastore::manifest::{BackupManifest, MANIFEST_BLOB_NAME, ENCRYPTED_KEY_BLOB_NAME};
+use pbs_client::{BackupWriter, H2Client, UploadOptions};
 
 use crate::registry::Registry;
-use crate::capi_types::*;
-use crate::upload_queue::*;
+use crate::capi_types::DataPointer;
+use crate::upload_queue::{ChunkUploadInfo, UploadQueueSender, UploadResultReceiver,  create_upload_queue};
 
 use lazy_static::lazy_static;
 
@@ -71,7 +75,7 @@ async fn register_zero_chunk(
 
     let param = json!({
         "wid": wid,
-        "digest": proxmox::tools::digest_to_hex(&zero_chunk_digest),
+        "digest": hex::encode(&zero_chunk_digest),
         "size": chunk_size,
         "encoded-size": chunk_data.len(),
     });
@@ -160,7 +164,7 @@ pub(crate) fn check_last_encryption_key(
     let fingerprint_guard = PREVIOUS_KEY_FINGERPRINT.lock().unwrap();
     match (*fingerprint_guard, config)  {
         (Some(last_fingerprint), Some(current_config)) => {
-            current_config.fingerprint().bytes() == &last_fingerprint
+            current_config.fingerprint() == last_fingerprint
                 || crypt_config_digest(current_config) == last_fingerprint
         },
         (None, None) => true,
@@ -208,7 +212,7 @@ pub(crate) async fn register_image(
         };
 
         if let Some(csum) = csum {
-            param["reuse-csum"] = proxmox::tools::digest_to_hex(&csum).into();
+            param["reuse-csum"] = hex::encode(&csum).into();
 
             match index {
                 Some(index) => {
@@ -292,7 +296,7 @@ pub(crate) async fn close_image(
         None => bail!("close_image: unknown error because upload result channel was already closed"),
     };
 
-    let csum = proxmox::tools::digest_to_hex(&upload_result.csum);
+    let csum = hex::encode(&upload_result.csum);
 
     let param = json!({
         "wid": wid ,
@@ -371,7 +375,7 @@ pub(crate) async fn write_data(
                 Box::new(futures::future::ok(upload_info))
            } else {
                 let (chunk, digest) = chunk_builder.build()?;
-                let digest_str = proxmox::tools::digest_to_hex(&digest);
+                let digest_str = hex::encode(&digest);
                 let chunk_data = chunk.into_inner();
 
                 let param = json!({
@@ -462,7 +466,6 @@ pub(crate) async fn finish_backup(
             Some(current_config) => {
                 let fp = current_config
                     .fingerprint()
-                    .bytes()
                     .to_owned();
                 Some(fp)
             },
