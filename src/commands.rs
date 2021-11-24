@@ -133,7 +133,7 @@ pub(crate) fn check_last_incremental_csum(
 ) -> bool {
 
     match PREVIOUS_CSUMS.lock().unwrap().get(device_name) {
-        Some(csum) => manifest.verify_file(&archive_name(device_name), &csum, device_size).is_ok(),
+        Some(csum) => manifest.verify_file(&archive_name(device_name), csum, device_size).is_ok(),
         None => false,
     }
 }
@@ -203,13 +203,7 @@ pub(crate) async fn register_image(
     let mut initial_index = Arc::new(None);
 
     if incremental {
-        let csum = {
-            let map = PREVIOUS_CSUMS.lock().unwrap();
-            match map.get(&device_name) {
-                Some(c) => Some(*c),
-                None => None
-            }
-        };
+        let csum = PREVIOUS_CSUMS.lock().unwrap().get(&device_name).copied();
 
         if let Some(csum) = csum {
             param["reuse-csum"] = hex::encode(&csum).into();

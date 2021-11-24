@@ -172,7 +172,7 @@ impl RestoreTask {
                 bytes += index.chunk_size;
                 zeroes += index.chunk_size;
             } else {
-                let raw_data = ReadChunk::read_chunk(&chunk_reader, &digest)?;
+                let raw_data = ReadChunk::read_chunk(&chunk_reader, digest)?;
                 let res = write_data_callback(offset, &raw_data);
                 if res < 0 {
                     bail!("write_data_callback failed ({})", res);
