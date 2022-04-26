@@ -1,6 +1,6 @@
 use anyhow::Error;
-use std::os::raw::{c_char, c_void, c_int};
 use std::ffi::CString;
+use std::os::raw::{c_char, c_int, c_void};
 
 pub(crate) struct CallbackPointers {
     pub callback: extern "C" fn(*mut c_void),
@@ -11,7 +11,6 @@ pub(crate) struct CallbackPointers {
 unsafe impl std::marker::Send for CallbackPointers {}
 
 impl CallbackPointers {
-
     pub fn send_result(self, result: Result<c_int, Error>) {
         match result {
             Ok(ret) => {
@@ -38,7 +37,7 @@ impl CallbackPointers {
     }
 }
 
-pub(crate) struct DataPointer (pub *const u8);
+pub(crate) struct DataPointer(pub *const u8);
 unsafe impl std::marker::Send for DataPointer {}
 
 /// Opaque handle for restore jobs

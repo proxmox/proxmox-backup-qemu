@@ -1,14 +1,14 @@
 use anyhow::Error;
 use std::collections::HashSet;
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 use futures::future::Future;
 use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
 
-use pbs_datastore::index::IndexFile;
-use pbs_datastore::fixed_index::FixedIndexReader;
 use pbs_client::*;
+use pbs_datastore::fixed_index::FixedIndexReader;
+use pbs_datastore::index::IndexFile;
 
 pub(crate) struct ChunkUploadInfo {
     pub digest: [u8; 32],
@@ -23,14 +23,16 @@ pub(crate) struct UploadResult {
     pub bytes_written: u64,
 }
 
-pub(crate) type UploadQueueSender = mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>;
-type UploadQueueReceiver = mpsc::Receiver<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>;
+pub(crate) type UploadQueueSender =
+    mpsc::Sender<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>;
+type UploadQueueReceiver =
+    mpsc::Receiver<Box<dyn Future<Output = Result<ChunkUploadInfo, Error>> + Send + Unpin>>;
 pub(crate) type UploadResultReceiver = oneshot::Receiver<Result<UploadResult, Error>>;
 type UploadResultSender = oneshot::Sender<Result<UploadResult, Error>>;
 
 pub(crate) fn create_upload_queue(
     client: Arc<BackupWriter>,
-    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    known_chunks: Arc<Mutex<HashSet<[u8; 32]>>>,
     initial_index: Arc<Option<FixedIndexReader>>,
     wid: u64,
     device_size: u64,
@@ -39,18 +41,16 @@ pub(crate) fn create_upload_queue(
     let (upload_queue_tx, upload_queue_rx) = mpsc::channel(100);
     let (upload_result_tx, upload_result_rx) = oneshot::channel();
 
-    tokio::spawn(
-        upload_handler(
-            client,
-            known_chunks,
-            initial_index,
-            wid,
-            device_size,
-            chunk_size,
-            upload_queue_rx,
-            upload_result_tx,
-        )
-    );
+    tokio::spawn(upload_handler(
+        client,
+        known_chunks,
+        initial_index,
+        wid,
+        device_size,
+        chunk_size,
+        upload_queue_rx,
+        upload_result_tx,
+    ));
 
     (upload_queue_tx, upload_result_rx)
 }
@@ -67,7 +67,9 @@ async fn upload_chunk_list(
     digest_list.truncate(0);
     offset_list.truncate(0);
 
-    client.upload_put("fixed_index", None, "application/json", param_data).await?;
+    client
+        .upload_put("fixed_index", None, "application/json", param_data)
+        .await?;
 
     Ok(())
 }
@@ -75,7 +77,7 @@ async fn upload_chunk_list(
 #[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
 async fn upload_handler(
     client: Arc<BackupWriter>,
-    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    known_chunks: Arc<Mutex<HashSet<[u8; 32]>>>,
     initial_index: Arc<Option<FixedIndexReader>>,
     wid: u64,
     device_size: u64,
@@ -89,7 +91,7 @@ async fn upload_handler(
     let mut digest_list = Vec::new();
     let mut offset_list = Vec::new();
 
-    let index_size = ((device_size + chunk_size -1)/chunk_size) as usize;
+    let index_size = ((device_size + chunk_size - 1) / chunk_size) as usize;
     let mut index = Vec::with_capacity(index_size);
     index.resize(index_size, [0u8; 32]);
 
@@ -103,17 +105,23 @@ async fn upload_handler(
 
     while let Some(response_future) = upload_queue.recv().await {
         match response_future.await {
-            Ok(ChunkUploadInfo { digest, offset, size, chunk_is_known }) => {
+            Ok(ChunkUploadInfo {
+                digest,
+                offset,
+                size,
+                chunk_is_known,
+            }) => {
                 let digest_str = hex::encode(&digest);
 
                 //println!("upload_handler {:?} {}", digest, offset);
-                let pos = (offset/chunk_size) as usize;
+                let pos = (offset / chunk_size) as usize;
                 index[pos] = digest;
 
                 chunk_count += 1;
                 bytes_written += size;
 
-                if !chunk_is_known { // register chunk as known
+                if !chunk_is_known {
+                    // register chunk as known
                     let mut known_chunks_guard = known_chunks.lock().unwrap();
                     known_chunks_guard.insert(digest);
                 }
@@ -127,12 +135,14 @@ async fn upload_handler(
                         wid,
                         &mut digest_list,
                         &mut offset_list,
-                    ).await {
+                    )
+                    .await
+                    {
                         let _ = upload_result.send(Err(err));
                         return;
                     }
                 }
-             }
+            }
             Err(err) => {
                 let _ = upload_result.send(Err(err));
                 return;
@@ -141,12 +151,9 @@ async fn upload_handler(
     }
 
     if !digest_list.is_empty() {
-        if let Err(err) = upload_chunk_list(
-            Arc::clone(&client),
-            wid,
-            &mut digest_list,
-            &mut offset_list,
-        ).await {
+        if let Err(err) =
+            upload_chunk_list(Arc::clone(&client), wid, &mut digest_list, &mut offset_list).await
+        {
             let _ = upload_result.send(Err(err));
             return;
         }
@@ -158,5 +165,9 @@ async fn upload_handler(
     }
     let csum = csum.finish();
 
-    let _ = upload_result.send(Ok(UploadResult { csum, chunk_count, bytes_written }));
+    let _ = upload_result.send(Ok(UploadResult {
+        csum,
+        chunk_count,
+        bytes_written,
+    }));
 }

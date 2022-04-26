@@ -2,22 +2,22 @@
 
 use anyhow::{format_err, Error};
 use std::ffi::CString;
+use std::os::raw::{c_char, c_int, c_long, c_uchar, c_void};
 use std::ptr;
-use std::os::raw::{c_uchar, c_char, c_int, c_void, c_long};
-use std::sync::{Arc, Mutex, Condvar};
+use std::sync::{Arc, Condvar, Mutex};
 
 use proxmox_lang::try_block;
 
 use pbs_api_types::{Authid, CryptMode};
-use pbs_datastore::BackupDir;
 use pbs_client::BackupRepository;
+use pbs_datastore::BackupDir;
 
 mod capi_types;
 use capi_types::*;
 
+mod commands;
 mod registry;
 mod upload_queue;
-mod commands;
 
 mod backup;
 use backup::*;
@@ -25,16 +25,14 @@ use backup::*;
 mod restore;
 use restore::*;
 
-mod tools;
 mod shared_cache;
+mod tools;
 
-pub const PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE: u64 = 1024*1024*4;
+pub const PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE: u64 = 1024 * 1024 * 4;
 
 use lazy_static::lazy_static;
-lazy_static!{
-    static ref VERSION_CSTR: CString = {
-        CString::new(env!("PBS_LIB_VERSION")).unwrap()
-    };
+lazy_static! {
+    static ref VERSION_CSTR: CString = { CString::new(env!("PBS_LIB_VERSION")).unwrap() };
 }
 
 /// Return a read-only pointer to a string containing the version of the library.
@@ -50,9 +48,11 @@ pub extern "C" fn proxmox_backup_qemu_version() -> *const c_char {
 /// and free the allocated memory.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn proxmox_backup_free_error(ptr: * mut c_char) {
+pub extern "C" fn proxmox_backup_free_error(ptr: *mut c_char) {
     if !ptr.is_null() {
-        unsafe { CString::from_raw(ptr); }
+        unsafe {
+            CString::from_raw(ptr);
+        }
     }
 }
 
@@ -63,24 +63,28 @@ fn convert_error_to_cstring(err: String) -> CString {
         Err(err) => {
             eprintln!("got error containung 0 bytes: {}", err);
             CString::new("failed to convert error message containing 0 bytes").unwrap()
-        },
+        }
     }
 }
 
 macro_rules! raise_error_null {
     ($error:ident, $err:expr) => {{
         let errmsg = convert_error_to_cstring($err.to_string());
-        unsafe { *$error =  errmsg.into_raw(); }
+        unsafe {
+            *$error = errmsg.into_raw();
+        }
         return ptr::null_mut();
-    }}
+    }};
 }
 
 macro_rules! raise_error_int {
     ($error:ident, $err:expr) => {{
         let errmsg = convert_error_to_cstring($err.to_string());
-        unsafe { *$error =  errmsg.into_raw(); }
+        unsafe {
+            *$error = errmsg.into_raw();
+        }
         return -1;
-    }}
+    }};
 }
 
 macro_rules! param_not_null {
@@ -90,7 +94,7 @@ macro_rules! param_not_null {
             $callback_info.send_result(result);
             return;
         }
-    }}
+    }};
 }
 
 /// Returns the text presentation (relative path) for a backup snapshot
@@ -103,9 +107,8 @@ pub extern "C" fn proxmox_backup_snapshot_string(
     backup_type: *const c_char,
     backup_id: *const c_char,
     backup_time: i64,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> *const c_char {
-
     let snapshot: Result<CString, Error> = try_block!({
         let backup_type: String = tools::utf8_c_string_lossy(backup_type)
             .ok_or_else(|| format_err!("backup_type must not be NULL"))?;
@@ -118,13 +121,10 @@ pub extern "C" fn proxmox_backup_snapshot_string(
     });
 
     match snapshot {
-        Ok(snapshot) => {
-            unsafe { libc::strdup(snapshot.as_ptr()) }
-        }
+        Ok(snapshot) => unsafe { libc::strdup(snapshot.as_ptr()) },
         Err(err) => raise_error_null!(error, err),
     }
 }
-
 
 #[derive(Clone)]
 pub(crate) struct BackupSetup {
@@ -150,7 +150,6 @@ struct GotResultCondition {
 }
 
 impl GotResultCondition {
-
     #[allow(clippy::mutex_atomic)]
     pub fn new() -> Self {
         Self {
@@ -186,17 +185,14 @@ impl GotResultCondition {
 
     #[no_mangle]
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    extern "C" fn wakeup_callback(
-        callback_data: *mut c_void,
-    ) {
-        let callback_data = unsafe { &mut *( callback_data as * mut GotResultCondition) };
+    extern "C" fn wakeup_callback(callback_data: *mut c_void) {
+        let callback_data = unsafe { &mut *(callback_data as *mut GotResultCondition) };
         #[allow(clippy::mutex_atomic)]
         let mut done = callback_data.lock.lock().unwrap();
         *done = true;
         callback_data.cond.notify_one();
     }
 }
-
 
 /// Create a new instance
 ///
@@ -215,9 +211,8 @@ pub extern "C" fn proxmox_backup_new(
     compress: bool,
     encrypt: bool,
     fingerprint: *const c_char,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> *mut ProxmoxBackupHandle {
-
     let task: Result<_, Error> = try_block!({
         let repo: BackupRepository = tools::utf8_c_string(repo)?
             .ok_or_else(|| format_err!("repo must not be NULL"))?
@@ -238,7 +233,11 @@ pub extern "C" fn proxmox_backup_new(
         }
 
         let crypt_mode = if keyfile.is_some() {
-            if encrypt { CryptMode::Encrypt } else {  CryptMode::SignOnly }
+            if encrypt {
+                CryptMode::Encrypt
+            } else {
+                CryptMode::SignOnly
+            }
         } else {
             CryptMode::None
         };
@@ -248,7 +247,11 @@ pub extern "C" fn proxmox_backup_new(
             port: repo.port(),
             auth_id: repo.auth_id().to_owned(),
             store: repo.store().to_owned(),
-            chunk_size: if chunk_size > 0 { chunk_size } else { PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE },
+            chunk_size: if chunk_size > 0 {
+                chunk_size
+            } else {
+                PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE
+            },
             backup_type: String::from("vm"),
             backup_id,
             password,
@@ -265,14 +268,14 @@ pub extern "C" fn proxmox_backup_new(
     match task {
         Ok(task) => {
             let boxed_task = Box::new(Arc::new(task));
-            Box::into_raw(boxed_task) as * mut ProxmoxBackupHandle
+            Box::into_raw(boxed_task) as *mut ProxmoxBackupHandle
         }
         Err(err) => raise_error_null!(error, err),
     }
 }
 
 fn backup_handle_to_task(handle: *mut ProxmoxBackupHandle) -> Arc<BackupTask> {
-    let task = unsafe { & *(handle as *const Arc<BackupTask>) };
+    let task = unsafe { &*(handle as *const Arc<BackupTask>) };
     // increase reference count while we use it inside rust
     Arc::clone(task)
 }
@@ -324,7 +327,12 @@ pub extern "C" fn proxmox_backup_connect_async(
     error: *mut *mut c_char,
 ) {
     let task = backup_handle_to_task(handle);
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     task.runtime().spawn(async move {
         let result = task.connect().await;
@@ -339,13 +347,10 @@ pub extern "C" fn proxmox_backup_connect_async(
 /// allocated memory.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn proxmox_backup_abort(
-    handle: *mut ProxmoxBackupHandle,
-    reason: *const c_char,
-) {
+pub extern "C" fn proxmox_backup_abort(handle: *mut ProxmoxBackupHandle, reason: *const c_char) {
     let task = backup_handle_to_task(handle);
-    let reason = tools::utf8_c_string_lossy(reason)
-        .unwrap_or_else(|| "no reason (NULL)".to_string());
+    let reason =
+        tools::utf8_c_string_lossy(reason).unwrap_or_else(|| "no reason (NULL)".to_string());
     task.abort(reason);
 }
 
@@ -362,11 +367,19 @@ pub extern "C" fn proxmox_backup_check_incremental(
 ) -> c_int {
     let task = backup_handle_to_task(handle);
 
-    if device_name.is_null() { return 0; }
+    if device_name.is_null() {
+        return 0;
+    }
 
     match tools::utf8_c_string_lossy(device_name) {
         None => 0,
-        Some(device_name) => if task.check_incremental(device_name, size) { 1 } else { 0 },
+        Some(device_name) => {
+            if task.check_incremental(device_name, size) {
+                1
+            } else {
+                0
+            }
+        }
     }
 }
 
@@ -378,7 +391,7 @@ pub extern "C" fn proxmox_backup_register_image(
     device_name: *const c_char, // expect utf8 here
     size: u64,
     incremental: bool,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> c_int {
     let mut result: c_int = -1;
 
@@ -387,7 +400,10 @@ pub extern "C" fn proxmox_backup_register_image(
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
     proxmox_backup_register_image_async(
-        handle, device_name, size, incremental,
+        handle,
+        device_name,
+        size,
+        incremental,
         callback_info.callback,
         callback_info.callback_data,
         callback_info.result,
@@ -414,10 +430,15 @@ pub extern "C" fn proxmox_backup_register_image_async(
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
     result: *mut c_int,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) {
     let task = backup_handle_to_task(handle);
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     param_not_null!(device_name, callback_info);
 
@@ -437,7 +458,7 @@ pub extern "C" fn proxmox_backup_add_config(
     name: *const c_char, // expect utf8 here
     data: *const u8,
     size: u64,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> c_int {
     let mut result: c_int = -1;
 
@@ -446,7 +467,10 @@ pub extern "C" fn proxmox_backup_add_config(
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
     proxmox_backup_add_config_async(
-        handle, name, data, size,
+        handle,
+        name,
+        data,
+        size,
         callback_info.callback,
         callback_info.callback_data,
         callback_info.result,
@@ -471,11 +495,16 @@ pub extern "C" fn proxmox_backup_add_config_async(
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
     result: *mut c_int,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) {
     let task = backup_handle_to_task(handle);
 
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     param_not_null!(name, callback_info);
     let name = unsafe { tools::utf8_c_string_lossy_non_null(name) };
@@ -508,7 +537,7 @@ pub extern "C" fn proxmox_backup_write_data(
     data: *const u8,
     offset: u64,
     size: u64,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> c_int {
     let mut result: c_int = -1;
 
@@ -517,7 +546,11 @@ pub extern "C" fn proxmox_backup_write_data(
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
     proxmox_backup_write_data_async(
-        handle, dev_id, data, offset, size,
+        handle,
+        dev_id,
+        data,
+        offset,
+        size,
         callback_info.callback,
         callback_info.callback_data,
         callback_info.result,
@@ -554,10 +587,15 @@ pub extern "C" fn proxmox_backup_write_data_async(
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
     result: *mut c_int,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) {
     let task = backup_handle_to_task(handle);
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     let data = DataPointer(data);
 
@@ -573,7 +611,7 @@ pub extern "C" fn proxmox_backup_write_data_async(
 pub extern "C" fn proxmox_backup_close_image(
     handle: *mut ProxmoxBackupHandle,
     dev_id: u8,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> c_int {
     let mut result: c_int = -1;
 
@@ -582,7 +620,8 @@ pub extern "C" fn proxmox_backup_close_image(
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
     proxmox_backup_close_image_async(
-        handle, dev_id,
+        handle,
+        dev_id,
         callback_info.callback,
         callback_info.callback_data,
         callback_info.result,
@@ -605,10 +644,15 @@ pub extern "C" fn proxmox_backup_close_image_async(
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
     result: *mut c_int,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) {
     let task = backup_handle_to_task(handle);
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     task.runtime().spawn(async move {
         let result = task.close_image(dev_id).await;
@@ -621,7 +665,7 @@ pub extern "C" fn proxmox_backup_close_image_async(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_finish(
     handle: *mut ProxmoxBackupHandle,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> c_int {
     let mut result: c_int = -1;
 
@@ -653,10 +697,15 @@ pub extern "C" fn proxmox_backup_finish_async(
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
     result: *mut c_int,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) {
-    let task = unsafe { & *(handle as * const Arc<BackupTask>) };
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let task = unsafe { &*(handle as *const Arc<BackupTask>) };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     task.runtime().spawn(async move {
         let result = task.finish().await;
@@ -670,8 +719,7 @@ pub extern "C" fn proxmox_backup_finish_async(
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
-
-    let task = handle as * mut Arc<BackupTask>;
+    let task = handle as *mut Arc<BackupTask>;
 
     unsafe { Box::from_raw(task) }; // take ownership, drop(task)
 }
@@ -681,7 +729,7 @@ pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
 // currently only implemented for images...
 
 fn restore_handle_to_task(handle: *mut ProxmoxRestoreHandle) -> Arc<RestoreTask> {
-    let restore_task = unsafe { & *(handle as *const Arc<RestoreTask>) };
+    let restore_task = unsafe { &*(handle as *const Arc<RestoreTask>) };
     // increase reference count while we use it inside rust
     Arc::clone(restore_task)
 }
@@ -696,9 +744,8 @@ pub extern "C" fn proxmox_restore_new(
     keyfile: *const c_char,
     key_password: *const c_char,
     fingerprint: *const c_char,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> *mut ProxmoxRestoreHandle {
-
     let result: Result<_, Error> = try_block!({
         let repo: BackupRepository = tools::utf8_c_string(repo)?
             .ok_or_else(|| format_err!("repo must not be NULL"))?
@@ -740,7 +787,7 @@ pub extern "C" fn proxmox_restore_new(
     match result {
         Ok(restore_task) => {
             let boxed_restore_task = Box::new(Arc::new(restore_task));
-            Box::into_raw(boxed_restore_task) as * mut ProxmoxRestoreHandle
+            Box::into_raw(boxed_restore_task) as *mut ProxmoxRestoreHandle
         }
         Err(err) => raise_error_null!(error, err),
     }
@@ -790,7 +837,12 @@ pub extern "C" fn proxmox_restore_connect_async(
     error: *mut *mut c_char,
 ) {
     let restore_task = restore_handle_to_task(handle);
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     restore_task.runtime().spawn(async move {
         let result = restore_task.connect().await;
@@ -804,8 +856,7 @@ pub extern "C" fn proxmox_restore_connect_async(
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_disconnect(handle: *mut ProxmoxRestoreHandle) {
-
-    let restore_task = handle as * mut Arc<RestoreTask>;
+    let restore_task = handle as *mut Arc<RestoreTask>;
     let restore_task = unsafe { Box::from_raw(restore_task) };
     drop(restore_task);
 
@@ -823,14 +874,12 @@ pub extern "C" fn proxmox_restore_image(
     archive_name: *const c_char, // expect full name here, i.e. "name.img.fidx"
     callback: extern "C" fn(*mut c_void, u64, *const c_uchar, u64) -> c_int,
     callback_data: *mut c_void,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
     verbose: bool,
 ) -> c_int {
-
     let restore_task = restore_handle_to_task(handle);
 
     let result: Result<_, Error> = try_block!({
-
         let archive_name = tools::utf8_c_string(archive_name)?
             .ok_or_else(|| format_err!("archive_name must not be NULL"))?;
 
@@ -838,13 +887,15 @@ pub extern "C" fn proxmox_restore_image(
             callback(callback_data, offset, data.as_ptr(), data.len() as u64)
         };
 
-        let write_zero_callback = move |offset: u64, len: u64| {
-            callback(callback_data, offset, std::ptr::null(), len)
-        };
+        let write_zero_callback =
+            move |offset: u64, len: u64| callback(callback_data, offset, std::ptr::null(), len);
 
-        proxmox_async::runtime::block_on(
-            restore_task.restore_image(archive_name, write_data_callback, write_zero_callback, verbose)
-        )?;
+        proxmox_async::runtime::block_on(restore_task.restore_image(
+            archive_name,
+            write_data_callback,
+            write_zero_callback,
+            verbose,
+        ))?;
 
         Ok(())
     });
@@ -862,14 +913,15 @@ pub extern "C" fn proxmox_restore_image(
 pub extern "C" fn proxmox_restore_open_image(
     handle: *mut ProxmoxRestoreHandle,
     archive_name: *const c_char,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> c_int {
     let mut result: c_int = -1;
     let mut got_result_condition = GotResultCondition::new();
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
     proxmox_restore_open_image_async(
-        handle, archive_name,
+        handle,
+        archive_name,
         callback_info.callback,
         callback_info.callback_data,
         callback_info.result,
@@ -890,10 +942,15 @@ pub extern "C" fn proxmox_restore_open_image_async(
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
     result: *mut c_int,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) {
     let restore_task = restore_handle_to_task(handle);
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     param_not_null!(archive_name, callback_info);
     let archive_name = unsafe { tools::utf8_c_string_lossy_non_null(archive_name) };
@@ -901,7 +958,7 @@ pub extern "C" fn proxmox_restore_open_image_async(
     restore_task.runtime().spawn(async move {
         let result = match restore_task.open_image(archive_name).await {
             Ok(res) => Ok(res as i32),
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         };
         callback_info.send_result(result);
     });
@@ -913,7 +970,7 @@ pub extern "C" fn proxmox_restore_open_image_async(
 pub extern "C" fn proxmox_restore_get_image_length(
     handle: *mut ProxmoxRestoreHandle,
     aid: u8,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> c_long {
     let restore_task = restore_handle_to_task(handle);
     let result = restore_task.get_image_length(aid);
@@ -940,7 +997,7 @@ pub extern "C" fn proxmox_restore_read_image_at(
     data: *mut u8,
     offset: u64,
     size: u64,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) -> c_int {
     let mut result: c_int = -1;
 
@@ -949,7 +1006,11 @@ pub extern "C" fn proxmox_restore_read_image_at(
     let callback_info = got_result_condition.callback_info(&mut result, error);
 
     proxmox_restore_read_image_at_async(
-        handle, aid, data, offset, size,
+        handle,
+        aid,
+        data,
+        offset,
+        size,
         callback_info.callback,
         callback_info.callback_data,
         callback_info.result,
@@ -983,11 +1044,16 @@ pub extern "C" fn proxmox_restore_read_image_at_async(
     callback: extern "C" fn(*mut c_void),
     callback_data: *mut c_void,
     result: *mut c_int,
-    error: * mut * mut c_char,
+    error: *mut *mut c_char,
 ) {
     let restore_task = restore_handle_to_task(handle);
 
-    let callback_info = CallbackPointers { callback, callback_data, error, result };
+    let callback_info = CallbackPointers {
+        callback,
+        callback_data,
+        error,
+        result,
+    };
 
     param_not_null!(data, callback_info);
     let data = DataPointer(data);
@@ -1007,7 +1073,9 @@ pub extern "C" fn proxmox_restore_read_image_at_async(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_export_state(buf_size: *mut usize) -> *mut u8 {
     let data = commands::serialize_state().into_boxed_slice();
-    unsafe { *buf_size = data.len(); }
+    unsafe {
+        *buf_size = data.len();
+    }
     Box::leak(data).as_mut_ptr()
 }
 
@@ -1028,6 +1096,8 @@ pub extern "C" fn proxmox_import_state(buf: *const u8, buf_size: usize) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_free_state_buf(buf: *mut u8) {
     if !buf.is_null() {
-        unsafe { Box::from_raw(buf); }
+        unsafe {
+            Box::from_raw(buf);
+        }
     }
 }

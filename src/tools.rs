@@ -7,11 +7,7 @@ pub fn utf8_c_string(ptr: *const c_char) -> Result<Option<String>, Error> {
     Ok(if ptr.is_null() {
         None
     } else {
-        Some(unsafe {
-            CStr::from_ptr(ptr)
-                .to_str()?
-                .to_owned()
-        })
+        Some(unsafe { CStr::from_ptr(ptr).to_str()?.to_owned() })
     })
 }
 

@@ -1,25 +1,25 @@
-use anyhow::{format_err, bail, Error};
-use std::collections::HashSet;
-use std::sync::{Mutex, Arc};
+use anyhow::{bail, format_err, Error};
 use once_cell::sync::OnceCell;
+use std::collections::HashSet;
 use std::os::raw::c_int;
+use std::sync::{Arc, Mutex};
 
-use futures::future::{Future, Either, FutureExt};
+use futures::future::{Either, Future, FutureExt};
 use tokio::runtime::Runtime;
 
-use proxmox_sys::fs::file_get_contents;
 use proxmox_async::runtime::get_runtime_with_builder;
+use proxmox_sys::fs::file_get_contents;
 
 use pbs_api_types::CryptMode;
+use pbs_client::{BackupWriter, HttpClient, HttpClientOptions};
+use pbs_config::key_config::{load_and_decrypt_key, rsa_encrypt_key_config, KeyConfig};
+use pbs_datastore::{BackupDir, BackupManifest};
 use pbs_tools::crypt_config::CryptConfig;
-use pbs_config::key_config::{KeyConfig, load_and_decrypt_key, rsa_encrypt_key_config};
-use pbs_datastore::{BackupDir, BackupManifest,};
-use pbs_client::{HttpClient, HttpClientOptions, BackupWriter};
 
 use super::BackupSetup;
 use crate::capi_types::*;
-use crate::registry::Registry;
 use crate::commands::*;
+use crate::registry::Registry;
 
 pub(crate) struct BackupTask {
     setup: BackupSetup,
@@ -32,13 +32,12 @@ pub(crate) struct BackupTask {
     last_manifest: OnceCell<Arc<BackupManifest>>,
     manifest: Arc<Mutex<BackupManifest>>,
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
-    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    known_chunks: Arc<Mutex<HashSet<[u8; 32]>>>,
     abort: tokio::sync::broadcast::Sender<()>,
-    aborted: OnceCell<String>,  // set on abort, conatins abort reason
+    aborted: OnceCell<String>, // set on abort, conatins abort reason
 }
 
 impl BackupTask {
-
     /// Create a new instance, using the specified Runtime
     ///
     /// We keep a reference to the runtime - else the runtime can be
@@ -47,17 +46,14 @@ impl BackupTask {
         setup: BackupSetup,
         compress: bool,
         crypt_mode: CryptMode,
-        runtime: Arc<Runtime>
+        runtime: Arc<Runtime>,
     ) -> Result<Self, Error> {
-
         let (crypt_config, rsa_encrypted_key) = match setup.keyfile {
             None => (None, None),
             Some(ref path) => {
-                let (key, created, _) = load_and_decrypt_key(path, & || {
-                    match setup.key_password {
-                        Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
-                        None => bail!("no key_password specified"),
-                    }
+                let (key, created, _) = load_and_decrypt_key(path, &|| match setup.key_password {
+                    Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
+                    None => bail!("no key_password specified"),
                 })?;
                 let rsa_encrypted_key = match setup.master_keyfile {
                     Some(ref master_keyfile) => {
@@ -68,7 +64,7 @@ impl BackupTask {
                         key_config.created = created; // keep original value
 
                         Some(rsa_encrypt_key_config(rsa, &key_config)?)
-                    },
+                    }
                     None => None,
                 };
                 (Some(Arc::new(CryptConfig::new(key)?)), rsa_encrypted_key)
@@ -96,7 +92,7 @@ impl BackupTask {
             known_chunks,
             writer: OnceCell::new(),
             last_manifest: OnceCell::new(),
-            aborted: OnceCell::new()
+            aborted: OnceCell::new(),
         })
     }
 
@@ -132,29 +128,43 @@ impl BackupTask {
     }
 
     pub async fn connect(&self) -> Result<c_int, Error> {
-
         self.check_aborted()?;
 
-        let command_future = async  {
+        let command_future = async {
             let options = HttpClientOptions::new_non_interactive(
                 self.setup.password.clone(),
                 self.setup.fingerprint.clone(),
             );
 
-            let http = HttpClient::new(&self.setup.host, self.setup.port, &self.setup.auth_id, options)?;
+            let http = HttpClient::new(
+                &self.setup.host,
+                self.setup.port,
+                &self.setup.auth_id,
+                options,
+            )?;
             let writer = BackupWriter::start(
-                http, self.crypt_config.clone(), &self.setup.store, "vm", &self.setup.backup_id,
-                self.setup.backup_time, false, false).await?;
+                http,
+                self.crypt_config.clone(),
+                &self.setup.store,
+                "vm",
+                &self.setup.backup_id,
+                self.setup.backup_time,
+                false,
+                false,
+            )
+            .await?;
 
             let last_manifest = writer.download_previous_manifest().await;
             let mut result = 0;
             if let Ok(last_manifest) = last_manifest {
                 result = 1;
-                self.last_manifest.set(Arc::new(last_manifest))
+                self.last_manifest
+                    .set(Arc::new(last_manifest))
                     .map_err(|_| format_err!("already connected!"))?;
             }
 
-            self.writer.set(writer)
+            self.writer
+                .set(writer)
                 .map_err(|_| format_err!("already connected!"))?;
 
             Ok(result)
@@ -171,12 +181,7 @@ impl BackupTask {
             .ok_or_else(|| format_err!("not connected"))
     }
 
-    pub async fn add_config(
-        &self,
-        name: String,
-        data: Vec<u8>,
-    ) -> Result<c_int, Error> {
-
+    pub async fn add_config(&self, name: String, data: Vec<u8>) -> Result<c_int, Error> {
         self.check_aborted()?;
 
         let command_future = add_config(
@@ -199,12 +204,15 @@ impl BackupTask {
         offset: u64,
         size: u64,
     ) -> Result<c_int, Error> {
-
         self.check_aborted()?;
 
         let command_future = write_data(
             self.need_writer()?,
-            if self.crypt_mode == CryptMode::Encrypt { self.crypt_config.clone() } else { None },
+            if self.crypt_mode == CryptMode::Encrypt {
+                self.crypt_config.clone()
+            } else {
+                None
+            },
             Arc::clone(&self.registry),
             Arc::clone(&self.known_chunks),
             dev_id,
@@ -223,17 +231,17 @@ impl BackupTask {
         self.last_manifest.get().map(Arc::clone)
     }
 
-    pub fn check_incremental(
-        &self,
-        device_name: String,
-        size: u64,
-    ) -> bool {
+    pub fn check_incremental(&self, device_name: String, size: u64) -> bool {
         match self.last_manifest() {
             Some(ref manifest) => {
                 check_last_incremental_csum(Arc::clone(manifest), &device_name, size)
-                    && check_last_encryption_mode(Arc::clone(manifest), &device_name, self.crypt_mode)
+                    && check_last_encryption_mode(
+                        Arc::clone(manifest),
+                        &device_name,
+                        self.crypt_mode,
+                    )
                     && check_last_encryption_key(self.crypt_config.clone())
-            },
+            }
             None => false,
         }
     }
@@ -244,7 +252,6 @@ impl BackupTask {
         size: u64,
         incremental: bool,
     ) -> Result<c_int, Error> {
-
         self.check_aborted()?;
 
         let command_future = register_image(
@@ -265,7 +272,6 @@ impl BackupTask {
     }
 
     pub async fn close_image(&self, dev_id: u8) -> Result<c_int, Error> {
-
         self.check_aborted()?;
 
         let command_future = close_image(
@@ -281,7 +287,6 @@ impl BackupTask {
     }
 
     pub async fn finish(&self) -> Result<c_int, Error> {
-
         self.check_aborted()?;
 
         let command_future = finish_backup(
@@ -294,21 +299,16 @@ impl BackupTask {
         let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
-
 }
 
-fn abortable_command<'a, F: 'a + Send + Future<Output=Result<c_int, Error>>>(
+fn abortable_command<'a, F: 'a + Send + Future<Output = Result<c_int, Error>>>(
     command_future: F,
-    abort_future: impl 'a + Send + Future<Output=Result<(), tokio::sync::broadcast::error::RecvError>>,
+    abort_future: impl 'a + Send + Future<Output = Result<(), tokio::sync::broadcast::error::RecvError>>,
 ) -> impl 'a + Future<Output = Result<c_int, Error>> {
-
-    futures::future::select(command_future.boxed(), abort_future.boxed())
-        .map(move |either| {
-            match either {
-                Either::Left((result, _)) => {
-                    result
-                }
-                Either::Right(_) => bail!("command aborted"),
-            }
-        })
+    futures::future::select(command_future.boxed(), abort_future.boxed()).map(move |either| {
+        match either {
+            Either::Left((result, _)) => result,
+            Either::Right(_) => bail!("command aborted"),
+        }
+    })
 }

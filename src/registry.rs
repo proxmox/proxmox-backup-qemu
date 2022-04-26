@@ -9,10 +9,11 @@ pub struct Registry<T> {
 }
 
 impl<T> Registry<T> {
-
     /// Create a new instance
     pub fn new() -> Self {
-        Self { info_list: Vec::new() }
+        Self {
+            info_list: Vec::new(),
+        }
     }
 
     /// Register data, returns associated ID

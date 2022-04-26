@@ -1,25 +1,25 @@
-use std::sync::{Arc, Mutex};
 use std::convert::TryInto;
+use std::sync::{Arc, Mutex};
 
-use anyhow::{format_err, bail, Error};
+use anyhow::{bail, format_err, Error};
 use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
 
 use proxmox_async::runtime::get_runtime_with_builder;
 
-use pbs_tools::crypt_config::CryptConfig;
+use pbs_client::{BackupReader, HttpClient, HttpClientOptions, RemoteChunkReader};
 use pbs_config::key_config::load_and_decrypt_key;
-use pbs_datastore::BackupManifest;
-use pbs_datastore::index::IndexFile;
 use pbs_datastore::cached_chunk_reader::CachedChunkReader;
-use pbs_datastore::fixed_index::FixedIndexReader;
 use pbs_datastore::data_blob::DataChunkBuilder;
+use pbs_datastore::fixed_index::FixedIndexReader;
+use pbs_datastore::index::IndexFile;
 use pbs_datastore::read_chunk::ReadChunk;
-use pbs_client::{HttpClient, HttpClientOptions, BackupReader, RemoteChunkReader};
+use pbs_datastore::BackupManifest;
+use pbs_tools::crypt_config::CryptConfig;
 
 use super::BackupSetup;
-use crate::registry::Registry;
 use crate::capi_types::DataPointer;
+use crate::registry::Registry;
 use crate::shared_cache::get_shared_chunk_cache;
 
 struct ImageAccessInfo {
@@ -38,21 +38,17 @@ pub(crate) struct RestoreTask {
 }
 
 impl RestoreTask {
-
     /// Create a new instance, using the specified Runtime
     ///
     /// We keep a reference to the runtime - else the runtime can be
     /// dropped and further connections fails.
     pub fn with_runtime(setup: BackupSetup, runtime: Arc<Runtime>) -> Result<Self, Error> {
-
         let crypt_config = match setup.keyfile {
             None => None,
             Some(ref path) => {
-                let (key, _, _) = load_and_decrypt_key(path, & || {
-                    match setup.key_password {
-                        Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
-                        None => bail!("no key_password specified"),
-                    }
+                let (key, _, _) = load_and_decrypt_key(path, &|| match setup.key_password {
+                    Some(ref key_password) => Ok(key_password.as_bytes().to_vec()),
+                    None => bail!("no key_password specified"),
                 })?;
                 Some(Arc::new(CryptConfig::new(key)?))
             }
@@ -81,13 +77,17 @@ impl RestoreTask {
     }
 
     pub async fn connect(&self) -> Result<libc::c_int, Error> {
-
         let options = HttpClientOptions::new_non_interactive(
             self.setup.password.clone(),
             self.setup.fingerprint.clone(),
         );
 
-        let http = HttpClient::new(&self.setup.host, self.setup.port, &self.setup.auth_id, options)?;
+        let http = HttpClient::new(
+            &self.setup.host,
+            self.setup.port,
+            &self.setup.auth_id,
+            options,
+        )?;
         let client = BackupReader::start(
             http,
             self.crypt_config.clone(),
@@ -95,16 +95,19 @@ impl RestoreTask {
             &self.setup.backup_type,
             &self.setup.backup_id,
             self.setup.backup_time,
-            true
-        ).await?;
+            true,
+        )
+        .await?;
 
         let (manifest, _) = client.download_manifest().await?;
         manifest.check_fingerprint(self.crypt_config.as_ref().map(Arc::as_ref))?;
 
-        self.manifest.set(Arc::new(manifest))
+        self.manifest
+            .set(Arc::new(manifest))
             .map_err(|_| format_err!("already connected!"))?;
 
-        self.client.set(client)
+        self.client
+            .set(client)
             .map_err(|_| format_err!("already connected!"))?;
 
         Ok(0)
@@ -121,7 +124,6 @@ impl RestoreTask {
         write_zero_callback: impl Fn(u64, u64) -> i32,
         verbose: bool,
     ) -> Result<(), Error> {
-
         if verbose {
             eprintln!("download and verify backup index");
         }
@@ -136,7 +138,9 @@ impl RestoreTask {
             None => bail!("no manifest"),
         };
 
-        let index = client.download_fixed_index(&manifest, &archive_name).await?;
+        let index = client
+            .download_fixed_index(&manifest, &archive_name)
+            .await?;
 
         let (_, zero_chunk_digest) = DataChunkBuilder::build_zero_chunk(
             self.crypt_config.as_ref().map(Arc::as_ref),
@@ -163,7 +167,7 @@ impl RestoreTask {
 
         for pos in 0..index.index_count() {
             let digest = index.index_digest(pos).unwrap();
-            let offset = (pos*index.chunk_size) as u64;
+            let offset = (pos * index.chunk_size) as u64;
             if digest == &zero_chunk_digest {
                 let res = write_zero_callback(offset, index.chunk_size as u64);
                 if res < 0 {
@@ -180,12 +184,16 @@ impl RestoreTask {
                 bytes += raw_data.len();
             }
             if verbose {
-                let next_per = ((pos+1)*100)/index.index_count();
+                let next_per = ((pos + 1) * 100) / index.index_count();
                 if per != next_per {
-                    eprintln!("progress {}% (read {} bytes, zeroes = {}% ({} bytes), duration {} sec)",
-                              next_per, bytes,
-                              zeroes*100/bytes, zeroes,
-                              start_time.elapsed().as_secs());
+                    eprintln!(
+                        "progress {}% (read {} bytes, zeroes = {}% ({} bytes), duration {} sec)",
+                        next_per,
+                        bytes,
+                        zeroes * 100 / bytes,
+                        zeroes,
+                        start_time.elapsed().as_secs()
+                    );
                     per = next_per;
                 }
             }
@@ -193,10 +201,11 @@ impl RestoreTask {
 
         let end_time = std::time::Instant::now();
         let elapsed = end_time.duration_since(start_time);
-        eprintln!("restore image complete (bytes={}, duration={:.2}s, speed={:.2}MB/s)",
-                  bytes,
-                  elapsed.as_secs_f64(),
-                  bytes as f64/(1024.0*1024.0*elapsed.as_secs_f64())
+        eprintln!(
+            "restore image complete (bytes={}, duration={:.2}s, speed={:.2}MB/s)",
+            bytes,
+            elapsed.as_secs_f64(),
+            bytes as f64 / (1024.0 * 1024.0 * elapsed.as_secs_f64())
         );
 
         Ok(())
@@ -208,11 +217,7 @@ impl RestoreTask {
         Ok(info.archive_size)
     }
 
-    pub async fn open_image(
-        &self,
-        archive_name: String,
-    ) -> Result<u8, Error> {
-
+    pub async fn open_image(&self, archive_name: String) -> Result<u8, Error> {
         let client = match self.client.get() {
             Some(reader) => Arc::clone(reader),
             None => bail!("not connected"),
@@ -223,7 +228,9 @@ impl RestoreTask {
             None => bail!("no manifest"),
         };
 
-        let index = client.download_fixed_index(&manifest, &archive_name).await?;
+        let index = client
+            .download_fixed_index(&manifest, &archive_name)
+            .await?;
         let archive_size = index.index_bytes();
         let most_used = index.find_most_used_chunks(8);
 
@@ -237,11 +244,16 @@ impl RestoreTask {
         );
 
         let cache = get_shared_chunk_cache();
-        let reader = Arc::new(CachedChunkReader::new_with_cache(chunk_reader, index, cache));
+        let reader = Arc::new(CachedChunkReader::new_with_cache(
+            chunk_reader,
+            index,
+            cache,
+        ));
 
         let info = ImageAccessInfo {
             archive_size,
-            _archive_name: archive_name, /// useful to debug
+            _archive_name: archive_name,
+            /// useful to debug
             reader,
         };
 
@@ -255,7 +267,6 @@ impl RestoreTask {
         offset: u64,
         size: u64,
     ) -> Result<libc::c_int, Error> {
-
         let (reader, image_size) = {
             let mut guard = self.image_registry.lock().unwrap();
             let info = guard.lookup(aid)?;

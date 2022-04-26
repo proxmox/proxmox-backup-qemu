@@ -1,25 +1,27 @@
 use anyhow::{bail, format_err, Error};
-use std::collections::{HashSet, HashMap};
-use std::sync::{Mutex, Arc};
+use std::collections::{HashMap, HashSet};
 use std::os::raw::c_int;
+use std::sync::{Arc, Mutex};
 
 use futures::future::{Future, TryFutureExt};
 use serde_json::json;
 
 use pbs_api_types::CryptMode;
-use pbs_tools::crypt_config::CryptConfig;
-use pbs_datastore::index::IndexFile;
-use pbs_datastore::data_blob::DataChunkBuilder;
-use pbs_datastore::manifest::{BackupManifest, MANIFEST_BLOB_NAME, ENCRYPTED_KEY_BLOB_NAME};
 use pbs_client::{BackupWriter, H2Client, UploadOptions};
+use pbs_datastore::data_blob::DataChunkBuilder;
+use pbs_datastore::index::IndexFile;
+use pbs_datastore::manifest::{BackupManifest, ENCRYPTED_KEY_BLOB_NAME, MANIFEST_BLOB_NAME};
+use pbs_tools::crypt_config::CryptConfig;
 
-use crate::registry::Registry;
 use crate::capi_types::DataPointer;
-use crate::upload_queue::{ChunkUploadInfo, UploadQueueSender, UploadResultReceiver,  create_upload_queue};
+use crate::registry::Registry;
+use crate::upload_queue::{
+    create_upload_queue, ChunkUploadInfo, UploadQueueSender, UploadResultReceiver,
+};
 
 use lazy_static::lazy_static;
 
-lazy_static!{
+lazy_static! {
     // Note: Any state stored here that needs to be sent along with migration
     // needs to be specified in (de)serialize_state as well!
 
@@ -41,7 +43,6 @@ pub struct ImageUploadInfo {
     upload_result: Option<UploadResultReceiver>,
 }
 
-
 pub(crate) fn serialize_state() -> Vec<u8> {
     let prev_csums = &*PREVIOUS_CSUMS.lock().unwrap();
     let prev_key_fingerprint = &*PREVIOUS_KEY_FINGERPRINT.lock().unwrap();
@@ -57,15 +58,13 @@ pub(crate) fn deserialize_state(data: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-
 // Note: We alway register/upload a chunk containing zeros
 async fn register_zero_chunk(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
     chunk_size: usize,
     wid: u64,
-) -> Result<[u8;32], Error> {
-
+) -> Result<[u8; 32], Error> {
     let (chunk, zero_chunk_digest) = DataChunkBuilder::build_zero_chunk(
         crypt_config.as_ref().map(Arc::as_ref),
         chunk_size,
@@ -80,7 +79,14 @@ async fn register_zero_chunk(
         "encoded-size": chunk_data.len(),
     });
 
-    client.upload_post("fixed_chunk", Some(param), "application/octet-stream", chunk_data).await?;
+    client
+        .upload_post(
+            "fixed_chunk",
+            Some(param),
+            "application/octet-stream",
+            chunk_data,
+        )
+        .await?;
 
     Ok(zero_chunk_digest)
 }
@@ -103,7 +109,9 @@ pub(crate) async fn add_config(
         ..UploadOptions::default()
     };
 
-    let stats = client.upload_blob_from_data(data, &blob_name, options).await?;
+    let stats = client
+        .upload_blob_from_data(data, &blob_name, options)
+        .await?;
 
     let mut guard = manifest.lock().unwrap();
     guard.add_file(blob_name, stats.size, stats.csum, crypt_mode)?;
@@ -115,14 +123,13 @@ fn archive_name(device_name: &str) -> String {
     format!("{}.img.fidx", device_name)
 }
 
-const CRYPT_CONFIG_HASH_INPUT:&[u8] = b"this is just a static string to protect against key changes";
+const CRYPT_CONFIG_HASH_INPUT: &[u8] =
+    b"this is just a static string to protect against key changes";
 
 /// Create an identifying digest for the crypt config
 /// legacy version for VMs freshly migrated from old version
 /// TODO: remove in PVE 7.0
-pub(crate) fn crypt_config_digest(
-    config: Arc<CryptConfig>,
-) -> [u8;32] {
+pub(crate) fn crypt_config_digest(config: Arc<CryptConfig>) -> [u8; 32] {
     config.compute_digest(CRYPT_CONFIG_HASH_INPUT)
 }
 
@@ -131,9 +138,10 @@ pub(crate) fn check_last_incremental_csum(
     device_name: &str,
     device_size: u64,
 ) -> bool {
-
     match PREVIOUS_CSUMS.lock().unwrap().get(device_name) {
-        Some(csum) => manifest.verify_file(&archive_name(device_name), csum, device_size).is_ok(),
+        Some(csum) => manifest
+            .verify_file(&archive_name(device_name), csum, device_size)
+            .is_ok(),
         None => false,
     }
 }
@@ -144,29 +152,25 @@ pub(crate) fn check_last_encryption_mode(
     crypt_mode: CryptMode,
 ) -> bool {
     match manifest.lookup_file_info(&archive_name(device_name)) {
-        Ok(file) => {
-            match (file.crypt_mode, crypt_mode) {
-                (CryptMode::Encrypt, CryptMode::Encrypt) => true,
-                (CryptMode::Encrypt, _) => false,
-                (CryptMode::SignOnly, CryptMode::Encrypt) => false,
-                (CryptMode::SignOnly, _) => true,
-                (CryptMode::None, CryptMode::Encrypt) => false,
-                (CryptMode::None, _) => true,
-            }
+        Ok(file) => match (file.crypt_mode, crypt_mode) {
+            (CryptMode::Encrypt, CryptMode::Encrypt) => true,
+            (CryptMode::Encrypt, _) => false,
+            (CryptMode::SignOnly, CryptMode::Encrypt) => false,
+            (CryptMode::SignOnly, _) => true,
+            (CryptMode::None, CryptMode::Encrypt) => false,
+            (CryptMode::None, _) => true,
         },
         _ => false,
     }
 }
 
-pub(crate) fn check_last_encryption_key(
-    config: Option<Arc<CryptConfig>>,
-) -> bool {
+pub(crate) fn check_last_encryption_key(config: Option<Arc<CryptConfig>>) -> bool {
     let fingerprint_guard = PREVIOUS_KEY_FINGERPRINT.lock().unwrap();
-    match (*fingerprint_guard, config)  {
+    match (*fingerprint_guard, config) {
         (Some(last_fingerprint), Some(current_config)) => {
             current_config.fingerprint() == last_fingerprint
                 || crypt_config_digest(current_config) == last_fingerprint
-        },
+        }
         (None, None) => true,
         _ => false,
     }
@@ -179,24 +183,26 @@ pub(crate) async fn register_image(
     crypt_mode: CryptMode,
     manifest: Option<Arc<BackupManifest>>,
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
-    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    known_chunks: Arc<Mutex<HashSet<[u8; 32]>>>,
     device_name: String,
     device_size: u64,
     chunk_size: u64,
     incremental: bool,
 ) -> Result<c_int, Error> {
-
     let archive_name = archive_name(&device_name);
 
     let index = match manifest {
         Some(manifest) => {
-            match client.download_previous_fixed_index(&archive_name, &manifest, Arc::clone(&known_chunks)).await {
+            match client
+                .download_previous_fixed_index(&archive_name, &manifest, Arc::clone(&known_chunks))
+                .await
+            {
                 Ok(index) => Some(index),
                 // not having a previous index is not fatal, so ignore errors
-                Err(_) => None
+                Err(_) => None,
             }
-        },
-        None => None
+        }
+        None => None,
     };
 
     let mut param = json!({ "archive-name": archive_name , "size": device_size });
@@ -210,7 +216,7 @@ pub(crate) async fn register_image(
 
             match index {
                 Some(index) => {
-                    let index_size = ((device_size + chunk_size -1)/chunk_size) as usize;
+                    let index_size = ((device_size + chunk_size - 1) / chunk_size) as usize;
                     if index_size != index.index_count() {
                         bail!("previous backup has different size than current state, cannot do incremental backup (drive: {})", archive_name);
                     }
@@ -219,23 +225,31 @@ pub(crate) async fn register_image(
                     }
 
                     initial_index = Arc::new(Some(index));
-                },
-                None => bail!("no previous backup found, cannot do incremental backup")
+                }
+                None => bail!("no previous backup found, cannot do incremental backup"),
             }
-
         } else {
             bail!("no previous backups in this session, cannot do incremental backup");
         }
     }
 
-    let wid = client.post("fixed_index", Some(param)).await?.as_u64().unwrap();
+    let wid = client
+        .post("fixed_index", Some(param))
+        .await?
+        .as_u64()
+        .unwrap();
 
     let zero_chunk_digest = register_zero_chunk(
         Arc::clone(&client),
-        if crypt_mode == CryptMode::Encrypt { crypt_config } else { None },
+        if crypt_mode == CryptMode::Encrypt {
+            crypt_config
+        } else {
+            None
+        },
         chunk_size as usize,
         wid,
-    ).await?;
+    )
+    .await?;
 
     let (upload_queue, upload_result) = create_upload_queue(
         Arc::clone(&client),
@@ -253,7 +267,7 @@ pub(crate) async fn register_image(
         device_size,
         upload_queue: Some(upload_queue),
         upload_result: Some(upload_result),
-   };
+    };
 
     let mut guard = registry.lock().unwrap();
     let dev_id = guard.register(info)?;
@@ -268,7 +282,6 @@ pub(crate) async fn close_image(
     dev_id: u8,
     crypt_mode: CryptMode,
 ) -> Result<c_int, Error> {
-
     //println!("close image {}", dev_id);
 
     let (wid, upload_result, device_name, device_size) = {
@@ -277,17 +290,22 @@ pub(crate) async fn close_image(
 
         info.upload_queue.take(); // close
 
-        (info.wid, info.upload_result.take(), info.device_name.clone(), info.device_size)
+        (
+            info.wid,
+            info.upload_result.take(),
+            info.device_name.clone(),
+            info.device_size,
+        )
     };
 
     let upload_result = match upload_result {
-        Some(upload_result) => {
-            match upload_result.await? {
-                Ok(res) => res,
-                Err(err) => bail!("close_image: upload error: {}", err),
-            }
+        Some(upload_result) => match upload_result.await? {
+            Ok(res) => res,
+            Err(err) => bail!("close_image: upload error: {}", err),
+        },
+        None => {
+            bail!("close_image: unknown error because upload result channel was already closed")
         }
-        None => bail!("close_image: unknown error because upload result channel was already closed"),
     };
 
     let csum = hex::encode(&upload_result.csum);
@@ -306,9 +324,13 @@ pub(crate) async fn close_image(
     let mut prev_csum_guard = PREVIOUS_CSUMS.lock().unwrap();
     prev_csum_guard.insert(info.device_name.clone(), upload_result.csum);
 
-
     let mut guard = manifest.lock().unwrap();
-    guard.add_file(format!("{}.img.fidx", device_name), device_size, upload_result.csum, crypt_mode)?;
+    guard.add_file(
+        format!("{}.img.fidx", device_name),
+        device_size,
+        upload_result.csum,
+        crypt_mode,
+    )?;
 
     Ok(0)
 }
@@ -318,21 +340,19 @@ pub(crate) async fn write_data(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
-    known_chunks: Arc<Mutex<HashSet<[u8;32]>>>,
+    known_chunks: Arc<Mutex<HashSet<[u8; 32]>>>,
     dev_id: u8,
     data: DataPointer,
     offset: u64,
-    size: u64, // actual data size
+    size: u64,       // actual data size
     chunk_size: u64, // expected data size
     compress: bool,
 ) -> Result<c_int, Error> {
-
     //println!("dev {}: write {} {}", dev_id, offset, size);
 
     let (wid, mut upload_queue, zero_chunk_digest) = {
         let mut guard = registry.lock().unwrap();
         let info = guard.lookup(dev_id)?;
-
 
         (info.wid, info.upload_queue.clone(), info.zero_chunk_digest)
     };
@@ -344,7 +364,12 @@ pub(crate) async fn write_data(
             if size != chunk_size {
                 bail!("write_data: got invalid null chunk");
             }
-            let upload_info = ChunkUploadInfo { digest: zero_chunk_digest, offset, size, chunk_is_known: true };
+            let upload_info = ChunkUploadInfo {
+                digest: zero_chunk_digest,
+                offset,
+                size,
+                chunk_is_known: true,
+            };
             reused = true;
             Box::new(futures::future::ok(upload_info))
         } else {
@@ -364,10 +389,15 @@ pub(crate) async fn write_data(
             };
 
             if chunk_is_known {
-                let upload_info = ChunkUploadInfo { digest: *digest, offset, size, chunk_is_known: true };
+                let upload_info = ChunkUploadInfo {
+                    digest: *digest,
+                    offset,
+                    size,
+                    chunk_is_known: true,
+                };
                 reused = true;
                 Box::new(futures::future::ok(upload_info))
-           } else {
+            } else {
                 let (chunk, digest) = chunk_builder.build()?;
                 let digest_str = hex::encode(&digest);
                 let chunk_data = chunk.into_inner();
@@ -380,20 +410,25 @@ pub(crate) async fn write_data(
                 });
 
                 // Phase 1: send data
-                let response_future = client.send_upload_request(
-                    "POST",
-                    "fixed_chunk",
-                    Some(param),
-                    "application/octet-stream",
-                    chunk_data,
-                ).await?;
+                let response_future = client
+                    .send_upload_request(
+                        "POST",
+                        "fixed_chunk",
+                        Some(param),
+                        "application/octet-stream",
+                        chunk_data,
+                    )
+                    .await?;
 
                 // create response future (run that in other task)
                 let upload_future = response_future
                     .map_err(Error::from)
                     .and_then(H2Client::h2api_response)
-                    .map_ok(move |_| {
-                        ChunkUploadInfo { digest, offset, size, chunk_is_known: false }
+                    .map_ok(move |_| ChunkUploadInfo {
+                        digest,
+                        offset,
+                        size,
+                        chunk_is_known: false,
                     })
                     .map_err(|err| format_err!("pipelined request failed: {}", err));
 
@@ -441,28 +476,35 @@ pub(crate) async fn finish_backup(
 ) -> Result<c_int, Error> {
     if let Some(rsa_encrypted_key) = rsa_encrypted_key {
         let target = ENCRYPTED_KEY_BLOB_NAME;
-        let options = UploadOptions { compress: false, encrypt: false, ..UploadOptions::default() };
+        let options = UploadOptions {
+            compress: false,
+            encrypt: false,
+            ..UploadOptions::default()
+        };
         let stats = client
             .upload_blob_from_data(rsa_encrypted_key, target, options)
             .await?;
-        manifest.lock().unwrap().add_file(target.to_string(), stats.size, stats.csum, CryptMode::Encrypt)?;
+        manifest.lock().unwrap().add_file(
+            target.to_string(),
+            stats.size,
+            stats.csum,
+            CryptMode::Encrypt,
+        )?;
     };
-
 
     let manifest = {
         let guard = manifest.lock().unwrap();
-        guard.to_string(crypt_config.as_ref().map(Arc::as_ref))
+        guard
+            .to_string(crypt_config.as_ref().map(Arc::as_ref))
             .map_err(|err| format_err!("unable to format manifest - {}", err))?
     };
 
     {
         let key_fingerprint = match crypt_config {
             Some(current_config) => {
-                let fp = current_config
-                    .fingerprint()
-                    .to_owned();
+                let fp = current_config.fingerprint().to_owned();
                 Some(fp)
-            },
+            }
             None => None,
         };
 

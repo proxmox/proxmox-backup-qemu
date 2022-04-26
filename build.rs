@@ -12,11 +12,7 @@ fn main() {
         Some(ver) if !ver.is_empty() => ver,
         _ => "UNKNOWN",
     };
-    let version_string = format!(
-        "{} ({})",
-        crate_ver,
-        git_ver,
-    );
+    let version_string = format!("{} ({})", crate_ver, git_ver,);
 
     cbindgen::Builder::new()
         .with_language(cbindgen::Language::C)
