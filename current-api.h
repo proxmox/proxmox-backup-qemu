@@ -74,9 +74,11 @@ const char *proxmox_backup_snapshot_string(const char *backup_type,
                                            char **error);
 
 /**
- * Create a new instance
+ * DEPRECATED: Create a new instance in the root namespace.
  *
  * Uses `PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE` if `chunk_size` is zero.
+ *
+ * Deprecated in favor of `proxmox_backup_new_ns` which includes a namespace parameter.
  */
 struct ProxmoxBackupHandle *proxmox_backup_new(const char *repo,
                                                const char *backup_id,
@@ -90,6 +92,27 @@ struct ProxmoxBackupHandle *proxmox_backup_new(const char *repo,
                                                bool encrypt,
                                                const char *fingerprint,
                                                char **error);
+
+/**
+ * Create a new instance.
+ *
+ * `backup_ns` may be NULL and defaults to the root namespace.
+ *
+ * Uses `PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE` if `chunk_size` is zero.
+ */
+struct ProxmoxBackupHandle *proxmox_backup_new_ns(const char *repo,
+                                                  const char *backup_ns,
+                                                  const char *backup_id,
+                                                  uint64_t backup_time,
+                                                  uint64_t chunk_size,
+                                                  const char *password,
+                                                  const char *keyfile,
+                                                  const char *key_password,
+                                                  const char *master_keyfile,
+                                                  bool compress,
+                                                  bool encrypt,
+                                                  const char *fingerprint,
+                                                  char **error);
 
 /**
  * Open connection to the backup server (sync)
@@ -270,7 +293,11 @@ void proxmox_backup_finish_async(struct ProxmoxBackupHandle *handle,
 void proxmox_backup_disconnect(struct ProxmoxBackupHandle *handle);
 
 /**
- * Connect the the backup server for restore (sync)
+ * DEPRECATED: Connect the the backup server for restore (sync)
+ *
+ * Deprecated in favor of `proxmox_restore_new_ns` which includes a namespace parameter.
+ * Also, it used "lossy" utf8 decoding on the snapshot name which is not the case in the new
+ * version anymore.
  */
 struct ProxmoxRestoreHandle *proxmox_restore_new(const char *repo,
                                                  const char *snapshot,
@@ -279,6 +306,18 @@ struct ProxmoxRestoreHandle *proxmox_restore_new(const char *repo,
                                                  const char *key_password,
                                                  const char *fingerprint,
                                                  char **error);
+
+/**
+ * Connect the the backup server for restore (sync)
+ */
+struct ProxmoxRestoreHandle *proxmox_restore_new_ns(const char *repo,
+                                                    const char *snapshot,
+                                                    const char *namespace_,
+                                                    const char *password,
+                                                    const char *keyfile,
+                                                    const char *key_password,
+                                                    const char *fingerprint,
+                                                    char **error);
 
 /**
  * Open connection to the backup server (sync)
