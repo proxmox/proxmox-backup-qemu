@@ -10,10 +10,10 @@ use tokio::runtime::Runtime;
 use proxmox_async::runtime::get_runtime_with_builder;
 use proxmox_sys::fs::file_get_contents;
 
-use pbs_api_types::CryptMode;
+use pbs_api_types::{BackupType, CryptMode};
 use pbs_client::{BackupWriter, HttpClient, HttpClientOptions};
 use pbs_config::key_config::{load_and_decrypt_key, rsa_encrypt_key_config, KeyConfig};
-use pbs_datastore::{BackupDir, BackupManifest};
+use pbs_datastore::BackupManifest;
 use pbs_tools::crypt_config::CryptConfig;
 
 use super::BackupSetup;
@@ -73,8 +73,7 @@ impl BackupTask {
 
         let (abort, _) = tokio::sync::broadcast::channel(16);
 
-        let snapshot = BackupDir::new(&setup.backup_type, &setup.backup_id, setup.backup_time)?;
-        let manifest = Arc::new(Mutex::new(BackupManifest::new(snapshot)));
+        let manifest = Arc::new(Mutex::new(BackupManifest::new(setup.backup_dir.clone())));
 
         let registry = Arc::new(Mutex::new(Registry::<ImageUploadInfo>::new()));
         let known_chunks = Arc::new(Mutex::new(HashSet::new()));
@@ -142,13 +141,14 @@ impl BackupTask {
                 &self.setup.auth_id,
                 options,
             )?;
+            let mut backup_dir = self.setup.backup_dir.clone();
+            backup_dir.group.ty = BackupType::Vm;
             let writer = BackupWriter::start(
                 http,
                 self.crypt_config.clone(),
                 &self.setup.store,
-                "vm",
-                &self.setup.backup_id,
-                self.setup.backup_time,
+                &self.setup.backup_ns,
+                &backup_dir,
                 false,
                 false,
             )

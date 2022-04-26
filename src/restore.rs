@@ -92,9 +92,8 @@ impl RestoreTask {
             http,
             self.crypt_config.clone(),
             &self.setup.store,
-            &self.setup.backup_type,
-            &self.setup.backup_id,
-            self.setup.backup_time,
+            &self.setup.backup_ns,
+            &self.setup.backup_dir,
             true,
         )
         .await?;

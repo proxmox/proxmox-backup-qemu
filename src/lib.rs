@@ -8,9 +8,8 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use proxmox_lang::try_block;
 
-use pbs_api_types::{Authid, CryptMode};
+use pbs_api_types::{Authid, BackupDir, BackupNamespace, BackupType, CryptMode};
 use pbs_client::BackupRepository;
-use pbs_datastore::BackupDir;
 
 mod capi_types;
 use capi_types::*;
@@ -32,7 +31,7 @@ pub const PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE: u64 = 1024 * 1024 * 4;
 
 use lazy_static::lazy_static;
 lazy_static! {
-    static ref VERSION_CSTR: CString = { CString::new(env!("PBS_LIB_VERSION")).unwrap() };
+    static ref VERSION_CSTR: CString = CString::new(env!("PBS_LIB_VERSION")).unwrap();
 }
 
 /// Return a read-only pointer to a string containing the version of the library.
@@ -51,7 +50,7 @@ pub extern "C" fn proxmox_backup_qemu_version() -> *const c_char {
 pub extern "C" fn proxmox_backup_free_error(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {
-            CString::from_raw(ptr);
+            let _ = CString::from_raw(ptr);
         }
     }
 }
@@ -110,12 +109,13 @@ pub extern "C" fn proxmox_backup_snapshot_string(
     error: *mut *mut c_char,
 ) -> *const c_char {
     let snapshot: Result<CString, Error> = try_block!({
-        let backup_type: String = tools::utf8_c_string_lossy(backup_type)
-            .ok_or_else(|| format_err!("backup_type must not be NULL"))?;
+        let backup_type: BackupType = tools::utf8_c_string_lossy(backup_type)
+            .ok_or_else(|| format_err!("backup_type must not be NULL"))?
+            .parse()?;
         let backup_id: String = tools::utf8_c_string_lossy(backup_id)
             .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
 
-        let snapshot = BackupDir::new(backup_type, backup_id, backup_time)?;
+        let snapshot = BackupDir::from((backup_type, backup_id, backup_time));
 
         Ok(CString::new(format!("{}", snapshot))?)
     });
@@ -133,9 +133,8 @@ pub(crate) struct BackupSetup {
     pub store: String,
     pub auth_id: Authid,
     pub chunk_size: u64,
-    pub backup_type: String,
-    pub backup_id: String,
-    pub backup_time: i64,
+    pub backup_ns: BackupNamespace,
+    pub backup_dir: BackupDir,
     pub password: String,
     pub keyfile: Option<std::path::PathBuf>,
     pub key_password: Option<String>,
@@ -194,9 +193,11 @@ impl GotResultCondition {
     }
 }
 
-/// Create a new instance
+/// DEPRECATED: Create a new instance in the root namespace.
 ///
 /// Uses `PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE` if `chunk_size` is zero.
+///
+/// Deprecated in favor of `proxmox_backup_new_ns` which includes a namespace parameter.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_backup_new(
@@ -213,10 +214,54 @@ pub extern "C" fn proxmox_backup_new(
     fingerprint: *const c_char,
     error: *mut *mut c_char,
 ) -> *mut ProxmoxBackupHandle {
+    proxmox_backup_new_ns(
+        repo,
+        std::ptr::null(),
+        backup_id,
+        backup_time,
+        chunk_size,
+        password,
+        keyfile,
+        key_password,
+        master_keyfile,
+        compress,
+        encrypt,
+        fingerprint,
+        error,
+    )
+}
+
+/// Create a new instance.
+///
+/// `backup_ns` may be NULL and defaults to the root namespace.
+///
+/// Uses `PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE` if `chunk_size` is zero.
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_backup_new_ns(
+    repo: *const c_char,
+    backup_ns: *const c_char,
+    backup_id: *const c_char,
+    backup_time: u64,
+    chunk_size: u64,
+    password: *const c_char,
+    keyfile: *const c_char,
+    key_password: *const c_char,
+    master_keyfile: *const c_char,
+    compress: bool,
+    encrypt: bool,
+    fingerprint: *const c_char,
+    error: *mut *mut c_char,
+) -> *mut ProxmoxBackupHandle {
     let task: Result<_, Error> = try_block!({
         let repo: BackupRepository = tools::utf8_c_string(repo)?
             .ok_or_else(|| format_err!("repo must not be NULL"))?
             .parse()?;
+
+        let backup_ns: BackupNamespace = match tools::utf8_c_string(backup_ns)? {
+            Some(ns) => ns.parse()?,
+            None => BackupNamespace::root(),
+        };
 
         let backup_id = tools::utf8_c_string(backup_id)?
             .ok_or_else(|| format_err!("backup_id must not be NULL"))?;
@@ -252,10 +297,9 @@ pub extern "C" fn proxmox_backup_new(
             } else {
                 PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE
             },
-            backup_type: String::from("vm"),
-            backup_id,
+            backup_ns,
+            backup_dir: BackupDir::from((BackupType::Vm, backup_id, backup_time as i64)),
             password,
-            backup_time: backup_time as i64,
             keyfile,
             key_password,
             master_keyfile,
@@ -734,7 +778,11 @@ fn restore_handle_to_task(handle: *mut ProxmoxRestoreHandle) -> Arc<RestoreTask>
     Arc::clone(restore_task)
 }
 
-/// Connect the the backup server for restore (sync)
+/// DEPRECATED: Connect the the backup server for restore (sync)
+///
+/// Deprecated in favor of `proxmox_restore_new_ns` which includes a namespace parameter.
+/// Also, it used "lossy" utf8 decoding on the snapshot name which is not the case in the new
+/// version anymore.
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_new(
@@ -755,9 +803,65 @@ pub extern "C" fn proxmox_restore_new(
             .ok_or_else(|| format_err!("snapshot must not be NULL"))?
             .parse()?;
 
-        let backup_type = snapshot.group().backup_type().to_owned();
-        let backup_id = snapshot.group().backup_id().to_owned();
-        let backup_time = snapshot.backup_time();
+        let password = tools::utf8_c_string(password)?
+            .ok_or_else(|| format_err!("password must not be null"))?;
+        let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
+        let key_password = tools::utf8_c_string(key_password)?;
+        let fingerprint = tools::utf8_c_string(fingerprint)?;
+
+        let setup = BackupSetup {
+            host: repo.host().to_owned(),
+            port: repo.port(),
+            auth_id: repo.auth_id().to_owned(),
+            store: repo.store().to_owned(),
+            chunk_size: PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, // not used by restore
+            backup_ns: BackupNamespace::root(),
+            backup_dir: snapshot,
+            password,
+            keyfile,
+            key_password,
+            master_keyfile: None,
+            fingerprint,
+        };
+
+        RestoreTask::new(setup)
+    });
+
+    match result {
+        Ok(restore_task) => {
+            let boxed_restore_task = Box::new(Arc::new(restore_task));
+            Box::into_raw(boxed_restore_task) as *mut ProxmoxRestoreHandle
+        }
+        Err(err) => raise_error_null!(error, err),
+    }
+}
+
+/// Connect the the backup server for restore (sync)
+#[no_mangle]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub extern "C" fn proxmox_restore_new_ns(
+    repo: *const c_char,
+    snapshot: *const c_char,
+    namespace: *const c_char,
+    password: *const c_char,
+    keyfile: *const c_char,
+    key_password: *const c_char,
+    fingerprint: *const c_char,
+    error: *mut *mut c_char,
+) -> *mut ProxmoxRestoreHandle {
+    let result: Result<_, Error> = try_block!({
+        let repo: BackupRepository = tools::utf8_c_string(repo)?
+            .ok_or_else(|| format_err!("repo must not be NULL"))?
+            .parse()?;
+
+        let namespace: BackupNamespace = tools::utf8_c_string(namespace)?
+            .map(|ns| ns.parse())
+            .transpose()?
+            .unwrap_or_default();
+
+        let snapshot: BackupDir = tools::utf8_c_string(snapshot)?
+            .ok_or_else(|| format_err!("snapshot must not be NULL"))?
+            .parse()?;
 
         let password = tools::utf8_c_string(password)?
             .ok_or_else(|| format_err!("password must not be null"))?;
@@ -771,10 +875,9 @@ pub extern "C" fn proxmox_restore_new(
             auth_id: repo.auth_id().to_owned(),
             store: repo.store().to_owned(),
             chunk_size: PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, // not used by restore
-            backup_type,
-            backup_id,
+            backup_ns: namespace,
+            backup_dir: snapshot,
             password,
-            backup_time,
             keyfile,
             key_password,
             master_keyfile: None,
@@ -988,7 +1091,6 @@ pub extern "C" fn proxmox_restore_get_image_length(
 ///
 /// Note: It is not an error for a successful call to transfer fewer
 /// bytes than requested.
-#[no_mangle]
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_read_image_at(
