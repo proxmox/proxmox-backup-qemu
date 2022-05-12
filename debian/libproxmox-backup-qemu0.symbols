@@ -11,6 +11,7 @@ libproxmox_backup_qemu.so.0 libproxmox-backup-qemu0 #MINVER#
  proxmox_backup_finish@Base 1.0.0
  proxmox_backup_finish_async@Base 1.0.0
  proxmox_backup_free_error@Base 1.0.0
+ proxmox_backup_new_ns@Base 1.3.0
  proxmox_backup_new@Base 1.0.3
  proxmox_backup_qemu_version@Base 1.0.2
  proxmox_backup_register_image@Base 1.0.0
@@ -27,8 +28,10 @@ libproxmox_backup_qemu.so.0 libproxmox-backup-qemu0 #MINVER#
  proxmox_restore_get_image_length@Base 1.0.0
  proxmox_restore_image@Base 1.0.0
  proxmox_restore_new@Base 1.0.0
+ proxmox_restore_new_ns@Base 1.3.0
  proxmox_restore_open_image@Base 1.0.0
  proxmox_restore_open_image_async@Base 1.0.0
  proxmox_restore_read_image_at@Base 1.0.0
  proxmox_restore_read_image_at_async@Base 1.0.0
  (optional)rust_eh_personality@Base 1.0.0
+ wakeup_callback@Base 1.3.0
