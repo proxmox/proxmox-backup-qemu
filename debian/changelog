@@ -1,3 +1,11 @@
+proxmox-backup-qemu (1.3.0-1) bullseye; urgency=medium
+
+  * update dependencies to latest proxmox-backup git version
+
+  * add backup namespace support but stay backward compatible
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 12 May 2022 13:56:18 +0200
+
 proxmox-backup-qemu (1.2.1-1) bullseye; urgency=medium
 
   * update dependencies to latest proxmox-backup git version
