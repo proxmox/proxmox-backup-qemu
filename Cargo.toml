@@ -9,7 +9,7 @@ authors = [
     "Thomas Lamprecht <t.lamprecht@proxmox.com>",
     "Wolfgang Bumiller <w.bumiller@proxmox.com>",
 ]
-edition = "2018"
+edition = "2021"
 build = "build.rs"
 
 [lib]
