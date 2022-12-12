@@ -1193,7 +1193,7 @@ pub extern "C" fn proxmox_import_state(buf: *const u8, buf_size: usize) {
 pub extern "C" fn proxmox_free_state_buf(buf: *mut u8) {
     if !buf.is_null() {
         unsafe {
-            Box::from_raw(buf);
+            drop(Box::from_raw(buf));
         }
     }
 }
