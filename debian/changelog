@@ -1,3 +1,10 @@
+proxmox-backup-qemu (1.3.2-1) bullseye; urgency=medium
+
+  * update dependencies
+  * switch to edition 2021
+
+ -- Proxmox Support Team <support@proxmox.com>  Mon, 12 Dec 2022 12:23:16 +0100
+
 proxmox-backup-qemu (1.3.1-1) bullseye; urgency=medium
 
   * re-build with updated dependencies for the API parameter switch from
