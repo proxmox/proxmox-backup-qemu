@@ -16,7 +16,7 @@ build = "build.rs"
 crate-type = ['lib', 'cdylib', 'staticlib']
 
 [build-dependencies]
-cbindgen = "0.20.0"
+cbindgen = "0.24.0"
 
 [dependencies]
 anyhow = "1.0"
@@ -32,13 +32,13 @@ openssl = "0.10"
 proxmox-async = "0.4"
 proxmox-lang = "1"
 proxmox-schema = { version = "1", features = [ "api-macro" ] }
-proxmox-sys = { version = "0.2", features = [ "sortable-macro"] }
+proxmox-sys = { version = "0.4", features = [ "sortable-macro"] }
 
-pbs-api-types = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "bc21ade293fa7af096ad21fce54fda1e9814993c" }
-pbs-tools     = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "bc21ade293fa7af096ad21fce54fda1e9814993c" }
-pbs-config    = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "bc21ade293fa7af096ad21fce54fda1e9814993c" }
-pbs-datastore = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "bc21ade293fa7af096ad21fce54fda1e9814993c" }
-pbs-client    = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "bc21ade293fa7af096ad21fce54fda1e9814993c" }
+pbs-api-types = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "8ebb984fbe2756392d438cc85b31f894829db06c" }
+pbs-client    = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "8ebb984fbe2756392d438cc85b31f894829db06c" }
+pbs-datastore = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "8ebb984fbe2756392d438cc85b31f894829db06c" }
+pbs-key-config    = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "8ebb984fbe2756392d438cc85b31f894829db06c" }
+pbs-tools     = { git = "git://git.proxmox.com/git/proxmox-backup.git", rev = "8ebb984fbe2756392d438cc85b31f894829db06c" }
 
 serde_json = "1.0"
 tokio = { version = "1.6", features = [ "fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "time" ] }

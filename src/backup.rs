@@ -12,8 +12,8 @@ use proxmox_sys::fs::file_get_contents;
 
 use pbs_api_types::{BackupType, CryptMode};
 use pbs_client::{BackupWriter, HttpClient, HttpClientOptions};
-use pbs_config::key_config::{load_and_decrypt_key, rsa_encrypt_key_config, KeyConfig};
 use pbs_datastore::BackupManifest;
+use pbs_key_config::{load_and_decrypt_key, rsa_encrypt_key_config, KeyConfig};
 use pbs_tools::crypt_config::CryptConfig;
 
 use super::BackupSetup;

@@ -8,13 +8,13 @@ use tokio::runtime::Runtime;
 use proxmox_async::runtime::get_runtime_with_builder;
 
 use pbs_client::{BackupReader, HttpClient, HttpClientOptions, RemoteChunkReader};
-use pbs_config::key_config::load_and_decrypt_key;
 use pbs_datastore::cached_chunk_reader::CachedChunkReader;
 use pbs_datastore::data_blob::DataChunkBuilder;
 use pbs_datastore::fixed_index::FixedIndexReader;
 use pbs_datastore::index::IndexFile;
 use pbs_datastore::read_chunk::ReadChunk;
 use pbs_datastore::BackupManifest;
+use pbs_key_config::load_and_decrypt_key;
 use pbs_tools::crypt_config::CryptConfig;
 
 use super::BackupSetup;
