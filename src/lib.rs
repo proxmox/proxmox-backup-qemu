@@ -417,13 +417,7 @@ pub extern "C" fn proxmox_backup_check_incremental(
 
     match tools::utf8_c_string_lossy(device_name) {
         None => 0,
-        Some(device_name) => {
-            if task.check_incremental(device_name, size) {
-                1
-            } else {
-                0
-            }
-        }
+        Some(device_name) => i32::from(task.check_incremental(device_name, size)),
     }
 }
 
