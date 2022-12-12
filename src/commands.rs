@@ -74,7 +74,7 @@ async fn register_zero_chunk(
 
     let param = json!({
         "wid": wid,
-        "digest": hex::encode(&zero_chunk_digest),
+        "digest": hex::encode(zero_chunk_digest),
         "size": chunk_size,
         "encoded-size": chunk_data.len(),
     });
@@ -212,7 +212,7 @@ pub(crate) async fn register_image(
         let csum = PREVIOUS_CSUMS.lock().unwrap().get(&device_name).copied();
 
         if let Some(csum) = csum {
-            param["reuse-csum"] = hex::encode(&csum).into();
+            param["reuse-csum"] = hex::encode(csum).into();
 
             match index {
                 Some(index) => {
@@ -308,7 +308,7 @@ pub(crate) async fn close_image(
         }
     };
 
-    let csum = hex::encode(&upload_result.csum);
+    let csum = hex::encode(upload_result.csum);
 
     let param = json!({
         "wid": wid ,
@@ -399,7 +399,7 @@ pub(crate) async fn write_data(
                 Box::new(futures::future::ok(upload_info))
             } else {
                 let (chunk, digest) = chunk_builder.build()?;
-                let digest_str = hex::encode(&digest);
+                let digest_str = hex::encode(digest);
                 let chunk_data = chunk.into_inner();
 
                 let param = json!({

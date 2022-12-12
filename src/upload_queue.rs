@@ -111,7 +111,7 @@ async fn upload_handler(
                 size,
                 chunk_is_known,
             }) => {
-                let digest_str = hex::encode(&digest);
+                let digest_str = hex::encode(digest);
 
                 //println!("upload_handler {:?} {}", digest, offset);
                 let pos = (offset / chunk_size) as usize;
