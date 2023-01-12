@@ -44,6 +44,8 @@ $(MAIN_DEB): build
 	cd build; dpkg-buildpackage -b -us -uc --no-pre-clean
 	lintian $(DEBS)
 
+proxmox-backup-qemu.h: build
+
 simpletest: simpletest.c proxmox-backup-qemu.h
 	gcc simpletest.c -o simpletest -lc  -Wl,-rpath=./target/$(BUILD_MODE) -L ./target/$(BUILD_MODE) -l proxmox_backup_qemu
 

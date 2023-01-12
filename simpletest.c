@@ -24,8 +24,9 @@ void main(int argc, char **argv) {
 
   char *fingerprint = getenv("PBS_FINGERPRINT");
 
-  ProxmoxBackupHandle *pbs = proxmox_backup_new
-    (repository, backup_id, backup_time, PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE, password, NULL, NULL, fingerprint, &pbs_error);
+  ProxmoxBackupHandle *pbs = proxmox_backup_new(
+    repository, backup_id, backup_time, PROXMOX_BACKUP_DEFAULT_CHUNK_SIZE,
+    password, NULL, NULL, NULL, false, false, fingerprint, &pbs_error);
 
   if (pbs == NULL) {
     fprintf(stderr, "proxmox_backup_new failed - %s\n", pbs_error);
