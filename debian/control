@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Proxmox Support Team <support@proxmox.com>
 Build-Depends: cbindgen,
  debhelper (>= 12),
+ patchelf,
  librust-anyhow-1+default-dev,
  librust-base64-0.13+default-dev,
  librust-bincode-1+default-dev,
