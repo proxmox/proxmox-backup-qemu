@@ -5,10 +5,10 @@ PACKAGE=libproxmox-backup-qemu0
 ARCH:=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
 export GITVERSION:=$(shell git rev-parse HEAD)
 
-MAIN_DEB=${PACKAGE}_${DEB_VERSION}_${ARCH}.deb
+MAIN_DEB=$(PACKAGE)_$(DEB_VERSION)_$(ARCH).deb
 OTHER_DEBS=						\
-	${PACKAGE}-dev_${DEB_VERSION}_${ARCH}.deb	\
-	${PACKAGE}-dbgsym_${DEB_VERSION}_${ARCH}.deb
+	$(PACKAGE)-dev_$(DEB_VERSION)_$(ARCH).deb	\
+	$(PACKAGE)-dbgsym_$(DEB_VERSION)_$(ARCH).deb
 DEBS=$(MAIN_DEB) $(OTHER_DEBS)
 
 DESTDIR=
@@ -34,8 +34,8 @@ build:
 
 .PHONY: install
 install: target/release/libproxmox_backup_qemu.so
-	install -D -m 0755 target/release/libproxmox_backup_qemu.so ${DESTDIR}/usr/lib//libproxmox_backup_qemu.so.0
-	cd ${DESTDIR}/usr/lib/; ls *; ln -s libproxmox_backup_qemu.so.0 libproxmox_backup_qemu.so
+	install -D -m 0755 target/release/libproxmox_backup_qemu.so $(DESTDIR)/usr/lib//libproxmox_backup_qemu.so.0
+	cd $(DESTDIR)/usr/lib/; ls *; ln -s libproxmox_backup_qemu.so.0 libproxmox_backup_qemu.so
 
 .PHONY: deb
 deb: $(OTHER_DEBS)
@@ -54,14 +54,13 @@ distclean: clean
 clean:
 	cargo clean
 	rm -rf *.deb *.dsc *.tar.gz *.buildinfo *.changes Cargo.lock proxmox-backup-qemu.h  build
-	find . -name '*~' -exec rm {} ';'
 
 .PHONY: dinstall
-dinstall: ${DEBS}
-	dpkg -i ${DEBS}
+dinstall: $(DEBS)
+	dpkg -i $(DEBS)
 
 .PHONY: upload
-upload: ${DEBS}
+upload: $(DEBS)
 	# check if working directory is clean
 	git diff --exit-code --stat && git diff --exit-code --stat --staged
-	tar cf - ${DEBS} | ssh -X repoman@repo.proxmox.com upload --product pve --dist bullseye
+	tar cf - $(DEBS) | ssh -X repoman@repo.proxmox.com upload --product pve --dist bullseye
