@@ -102,7 +102,7 @@ Description: Proxmox Backup Server client library for QEMU
 
 Package: libproxmox-backup-qemu0-dev
 Architecture: any
-Depends: libproxmox-backup-qemu0 (= ${binary:Version}),
+Depends: libproxmox-backup-qemu0 (= ${binary:Version}), ${misc:Depends},
 Description: Proxmox Backup Server client library for QEMU development files
  This library contains the library to access the Proxmox Backup server from
  within QEMU.
