@@ -93,7 +93,7 @@ Build-Depends: cargo:native,
                librust-zstd-0.12+bindgen-dev,
                librust-zstd-0.12+default-dev,
                patchelf,
-Standards-Version: 4.5.1
+Standards-Version: 4.6.2
 Homepage: https://www.proxmox.com
 
 Package: libproxmox-backup-qemu0
