@@ -3,10 +3,17 @@
 # output every command that modifies files on the build system.
 #DH_VERBOSE = 1
 
+include /usr/share/dpkg/pkg-info.mk
+
 export BUILD_MODE=skip
 
 %:
 	dh $@
+
+override_dh_auto_configure:
+	@perl -ne 'if (/^version\s*=\s*"(\d+(?:\.\d+)+)"/) { my $$v_cargo = $$1; my $$v_deb = "$(DEB_VERSION_UPSTREAM)"; \
+	    die "ERROR: d/changelog <-> Cargo.toml version mismatch: $$v_cargo != $$v_deb\n" if $$v_cargo ne $$v_deb; exit(0); }' Cargo.toml
+	dh_auto_configure
 
 override_dh_strip:
 	dh_strip
