@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Proxmox Support Team <support@proxmox.com>
 Build-Depends: cargo:native,
                cbindgen,
-               debhelper (>= 12),
+               debhelper-compat (= 13),
                git,
                librust-anyhow-1+default-dev,
                librust-base64-0.13+default-dev,
