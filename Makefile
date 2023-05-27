@@ -2,12 +2,12 @@ include /usr/share/dpkg/default.mk
 
 PACKAGE=libproxmox-backup-qemu0
 
-ARCH:=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
+ARCH:=$(DEB_HOST_ARCH)
 export GITVERSION:=$(shell git rev-parse HEAD)
 
 MAIN_DEB=$(PACKAGE)_$(DEB_VERSION)_$(ARCH).deb
-OTHER_DEBS=						\
-	$(PACKAGE)-dev_$(DEB_VERSION)_$(ARCH).deb	\
+OTHER_DEBS = \
+	$(PACKAGE)-dev_$(DEB_VERSION)_$(ARCH).deb \
 	$(PACKAGE)-dbgsym_$(DEB_VERSION)_$(ARCH).deb
 DEBS=$(MAIN_DEB) $(OTHER_DEBS)
 
