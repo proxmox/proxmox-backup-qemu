@@ -2,8 +2,10 @@ Source: proxmox-backup-qemu
 Section: admin
 Priority: optional
 Maintainer: Proxmox Support Team <support@proxmox.com>
-Build-Depends: cbindgen,
+Build-Depends: cargo:native,
+               cbindgen,
                debhelper (>= 12),
+               git,
                librust-anyhow-1+default-dev,
                librust-base64-0.13+default-dev,
                librust-bincode-1+default-dev,
