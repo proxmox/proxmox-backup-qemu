@@ -53,7 +53,7 @@ submodule:
 deb: $(OTHER_DEBS)
 $(OTHER_DEBS): $(MAIN_DEB)
 $(MAIN_DEB): $(BUILDDIR)
-	cd build; dpkg-buildpackage -b -us -uc --no-pre-clean
+	cd $(BUILDDIR); dpkg-buildpackage -b -us -uc
 	lintian $(DEBS)
 
 proxmox-backup-qemu.h: $(TARGETDIR)/libproxmox_backup_qemu.so
