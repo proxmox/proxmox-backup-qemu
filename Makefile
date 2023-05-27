@@ -6,6 +6,7 @@ BUILDDIR = $(PACKAGE)-$(DEB_VERSION_UPSTREAM)
 ARCH:=$(DEB_HOST_ARCH)
 export GITVERSION:=$(shell git rev-parse HEAD)
 
+DSC=$(DEB_SOURCE)_$(DEB_VERSION).dsc
 MAIN_DEB=$(PACKAGE)_$(DEB_VERSION)_$(ARCH).deb
 OTHER_DEBS = \
 	$(PACKAGE)-dev_$(DEB_VERSION)_$(ARCH).deb \
@@ -49,7 +50,18 @@ $(BUILDDIR): submodule
 submodule:
 	[ -e submodules/proxmox-backup/Cargo.toml ] || git submodule update --init --recursive
 
-.PHONY: deb
+dsc:
+	rm -rf $(BUILDDIR) $(DSC)
+	$(MAKE) $(DSC)
+	lintian $(DSC)
+
+$(DSC): $(BUILDDIR)
+	cd $(BUILDDIR); dpkg-buildpackage -S -us -uc -d
+
+sbuild: $(DSC)
+	sbuild $<
+
+.PHONY: deb dsc
 deb: $(OTHER_DEBS)
 $(OTHER_DEBS): $(MAIN_DEB)
 $(MAIN_DEB): $(BUILDDIR)
@@ -64,7 +76,8 @@ simpletest: simpletest.c proxmox-backup-qemu.h
 distclean: clean
 clean:
 	cargo clean
-	rm -rf *.deb *.dsc *.tar.gz *.buildinfo *.changes Cargo.lock proxmox-backup-qemu.h  build
+	rm -rf $(PACKAGE)-[0-9]*/
+	rm -f *.deb *.dsc $(DEB_SOURCE)*.tar* *.build *.buildinfo *.changes Cargo.lock proxmox-backup-qemu.h
 
 .PHONY: dinstall
 dinstall: $(DEBS)
