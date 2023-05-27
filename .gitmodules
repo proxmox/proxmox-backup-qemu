@@ -1,0 +1,3 @@
+[submodule "dependecies/proxmox-backup"]
+	path = submodules/proxmox-backup
+	url = git://git.proxmox.com/git/proxmox-backup.git

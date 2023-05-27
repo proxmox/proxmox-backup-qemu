@@ -30,12 +30,15 @@ build:
 	rm -rf build
 	cargo build --release
 	diff -I 'PROXMOX_BACKUP_QEMU_VERSION' -up current-api.h proxmox-backup-qemu.h
-	rsync -a debian Makefile Cargo.toml Cargo.lock build.rs proxmox-backup-qemu.h src target current-api.h build/
+	rsync -a debian submodules Makefile Cargo.toml Cargo.lock build.rs proxmox-backup-qemu.h src target current-api.h build/
 
 .PHONY: install
 install: target/release/libproxmox_backup_qemu.so
 	install -D -m 0755 target/release/libproxmox_backup_qemu.so $(DESTDIR)/usr/lib//libproxmox_backup_qemu.so.0
 	cd $(DESTDIR)/usr/lib/; ls *; ln -s libproxmox_backup_qemu.so.0 libproxmox_backup_qemu.so
+
+submodule:
+	[ -e submodules/proxmox-backup/Cargo.toml ] || git submodule update --init --recursive
 
 .PHONY: deb
 deb: $(OTHER_DEBS)
