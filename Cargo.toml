@@ -34,7 +34,8 @@ openssl = "0.10"
 proxmox-async = "0.4"
 proxmox-lang = "1"
 proxmox-schema = { version = "1", features = [ "api-macro" ] }
-proxmox-sys = { version = "0.4", features = [ "sortable-macro"] }
+proxmox-sortable-macro = "0.1.2"
+proxmox-sys = "0.5"
 
 pbs-api-types  = { path = "submodules/proxmox-backup/pbs-api-types" }
 pbs-client     = { path = "submodules/proxmox-backup/pbs-client" }
