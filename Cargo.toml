@@ -16,13 +16,13 @@ build = "build.rs"
 crate-type = ['lib', 'cdylib', 'staticlib']
 
 [build-dependencies]
-cbindgen = "0.24.0"
+cbindgen = "0.26.0"
 
 [dependencies]
 anyhow = "1.0"
 bytes = "1.0"
 # only so cargo-fairy picks it up..
-cbindgen = "0.24.0"
+cbindgen = "0.26.0"
 futures = "0.3"
 hex = "0.4.3"
 h2 = { version = "0.3", features = [ "stream" ] }

@@ -19,6 +19,7 @@ fn main() {
         .with_crate(&crate_dir)
         .with_header(header)
         .with_include_guard("PROXMOX_BACKUP_QEMU_H")
+        .exclude_item("wakeup_callback")
         .generate()
         .unwrap()
         .write_to_file("proxmox-backup-qemu.h");
