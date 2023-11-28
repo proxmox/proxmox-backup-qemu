@@ -1,3 +1,9 @@
+proxmox-backup-qemu (1.4.1) bookworm; urgency=medium
+
+  * update to PBS 3.0.5
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 28 Nov 2023 13:11:57 +0100
+
 proxmox-backup-qemu (1.4.0) bookworm; urgency=medium
 
   * build for Proxmox VE 8 / Debian 12 Bookworm
