@@ -89,7 +89,7 @@ impl RestoreTask {
             options,
         )?;
         let client = BackupReader::start(
-            http,
+            &http,
             self.crypt_config.clone(),
             &self.setup.store,
             &self.setup.backup_ns,
