@@ -759,7 +759,7 @@ pub extern "C" fn proxmox_backup_finish_async(
 pub extern "C" fn proxmox_backup_disconnect(handle: *mut ProxmoxBackupHandle) {
     let task = handle as *mut Arc<BackupTask>;
 
-    unsafe { Box::from_raw(task) }; // take ownership, drop(task)
+    drop(unsafe { Box::from_raw(task) }); // take ownership, drop(task)
 }
 
 // Simple interface to restore data

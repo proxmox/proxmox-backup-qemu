@@ -16,7 +16,7 @@ fn main() {
 
     cbindgen::Builder::new()
         .with_language(cbindgen::Language::C)
-        .with_crate(&crate_dir)
+        .with_crate(crate_dir)
         .with_header(header)
         .with_include_guard("PROXMOX_BACKUP_QEMU_H")
         .exclude_item("wakeup_callback")

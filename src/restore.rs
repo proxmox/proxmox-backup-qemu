@@ -252,7 +252,7 @@ impl RestoreTask {
         let info = ImageAccessInfo {
             archive_size,
             _archive_name: archive_name,
-            /// useful to debug
+            // useful to debug
             reader,
         };
 
