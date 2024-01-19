@@ -34,7 +34,7 @@ pub(crate) struct BackupTask {
     registry: Arc<Mutex<Registry<ImageUploadInfo>>>,
     known_chunks: Arc<Mutex<HashSet<[u8; 32]>>>,
     abort: tokio::sync::broadcast::Sender<()>,
-    aborted: OnceCell<String>, // set on abort, conatins abort reason
+    aborted: OnceCell<String>, // set on abort, contains abort reason
 }
 
 impl BackupTask {

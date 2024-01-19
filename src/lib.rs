@@ -98,7 +98,7 @@ macro_rules! param_not_null {
 
 /// Returns the text presentation (relative path) for a backup snapshot
 ///
-/// The resturned value is allocated with strdup(), and can be freed
+/// The returned value is allocated with strdup(), and can be freed
 /// with free().
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -142,7 +142,7 @@ pub(crate) struct BackupSetup {
     pub fingerprint: Option<String>,
 }
 
-// helper class to implement synchrounous interface
+// helper class to implement synchronous interface
 struct GotResultCondition {
     lock: Mutex<bool>,
     cond: Condvar,
@@ -327,7 +327,7 @@ fn backup_handle_to_task(handle: *mut ProxmoxBackupHandle) -> Arc<BackupTask> {
 /// Open connection to the backup server (sync)
 ///
 /// Returns:
-///  0 ... Sucecss (no prevbious backup)
+///  0 ... Success (no previous backup)
 ///  1 ... Success (found previous backup)
 /// -1 ... Error
 #[no_mangle]
@@ -358,7 +358,7 @@ pub extern "C" fn proxmox_backup_connect(
 /// Open connection to the backup server
 ///
 /// Returns:
-///  0 ... Sucecss (no prevbious backup)
+///  0 ... Success (no previous backup)
 ///  1 ... Success (found previous backup)
 /// -1 ... Error
 #[no_mangle]
@@ -565,7 +565,7 @@ pub extern "C" fn proxmox_backup_add_config_async(
 ///
 /// Returns:
 /// -1: on error
-///  0: successful, chunk already exists on server, so it was resued
+///  0: successful, chunk already exists on server, so it was reused
 ///  size: successful, chunk uploaded
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -608,11 +608,11 @@ pub extern "C" fn proxmox_backup_write_data(
 /// (only allowed if size == chunk_size)
 ///
 /// Note: The data pointer needs to be valid until the async
-/// opteration is finished.
+/// operation is finished.
 ///
 /// Returns:
 /// -1: on error
-///  0: successful, chunk already exists on server, so it was resued
+///  0: successful, chunk already exists on server, so it was reused
 ///  size: successful, chunk uploaded
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -772,7 +772,7 @@ fn restore_handle_to_task(handle: *mut ProxmoxRestoreHandle) -> Arc<RestoreTask>
     Arc::clone(restore_task)
 }
 
-/// DEPRECATED: Connect the the backup server for restore (sync)
+/// DEPRECATED: Connect to the backup server for restore (sync)
 ///
 /// Deprecated in favor of `proxmox_restore_new_ns` which includes a namespace parameter.
 /// Also, it used "lossy" utf8 decoding on the snapshot name which is not the case in the new
@@ -830,7 +830,7 @@ pub extern "C" fn proxmox_restore_new(
     }
 }
 
-/// Connect the the backup server for restore (sync)
+/// Connect to the backup server for restore (sync)
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_restore_new_ns(
@@ -893,7 +893,7 @@ pub extern "C" fn proxmox_restore_new_ns(
 /// Open connection to the backup server (sync)
 ///
 /// Returns:
-///  0 ... Sucecss (no prevbious backup)
+///  0 ... Success (no previous backup)
 /// -1 ... Error
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -922,7 +922,7 @@ pub extern "C" fn proxmox_restore_connect(
 /// Open connection to the backup server (async)
 ///
 /// Returns:
-///  0 ... Sucecss (no prevbious backup)
+///  0 ... Success (no previous backup)
 /// -1 ... Error
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -1125,7 +1125,7 @@ pub extern "C" fn proxmox_restore_read_image_at(
 /// of file).
 ///
 /// Note: The data pointer needs to be valid until the async
-/// opteration is finished.
+/// operation is finished.
 ///
 /// Note: The call will only ever transfer less than 'size' bytes if
 /// the end of the file has been reached.

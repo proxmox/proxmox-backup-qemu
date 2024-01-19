@@ -58,7 +58,7 @@ pub(crate) fn deserialize_state(data: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-// Note: We alway register/upload a chunk containing zeros
+// Note: We always register/upload a chunk containing zeros
 async fn register_zero_chunk(
     client: Arc<BackupWriter>,
     crypt_config: Option<Arc<CryptConfig>>,
@@ -439,7 +439,7 @@ pub(crate) async fn write_data(
 
     match upload_queue {
         Some(ref mut upload_queue) => {
-            // Phase 2: send reponse future to other task
+            // Phase 2: send response future to other task
             if upload_queue.send(upload_future).await.is_err() {
                 let upload_result = {
                     let mut guard = registry.lock().unwrap();
@@ -463,7 +463,7 @@ pub(crate) async fn write_data(
         }
     }
 
-    //println!("upload chunk sucessful");
+    //println!("upload chunk successful");
 
     Ok(if reused { 0 } else { size as c_int })
 }

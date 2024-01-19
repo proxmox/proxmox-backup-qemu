@@ -19,6 +19,6 @@
  * result: *mut c_int,
  * error: *mut *mut c_char,
  *
- * The callback function is called when the the async function is
- * ready. Possible errors are returned in 'error'.
+ * The callback function is called when the async function is ready.
+ * Possible errors are returned in 'error'.
  */
