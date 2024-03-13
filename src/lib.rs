@@ -11,7 +11,7 @@ use proxmox_lang::try_block;
 use pbs_api_types::{Authid, BackupDir, BackupNamespace, BackupType, CryptMode};
 use pbs_client::BackupRepository;
 
-mod capi_types;
+pub mod capi_types;
 use capi_types::*;
 
 mod commands;
