@@ -144,7 +144,7 @@ impl BackupTask {
             let mut backup_dir = self.setup.backup_dir.clone();
             backup_dir.group.ty = BackupType::Vm;
             let writer = BackupWriter::start(
-                http,
+                &http,
                 self.crypt_config.clone(),
                 &self.setup.store,
                 &self.setup.backup_ns,
