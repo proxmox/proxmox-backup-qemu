@@ -19,8 +19,8 @@
  * result: *mut c_int,
  * error: *mut *mut c_char,
  *
- * The callback function is called when the the async function is
- * ready. Possible errors are returned in 'error'.
+ * The callback function is called when the async function is ready.
+ * Possible errors are returned in 'error'.
  */
 
 
@@ -65,7 +65,7 @@ void proxmox_backup_free_error(char *ptr);
 /**
  * Returns the text presentation (relative path) for a backup snapshot
  *
- * The resturned value is allocated with strdup(), and can be freed
+ * The returned value is allocated with strdup(), and can be freed
  * with free().
  */
 const char *proxmox_backup_snapshot_string(const char *backup_type,
@@ -118,7 +118,7 @@ struct ProxmoxBackupHandle *proxmox_backup_new_ns(const char *repo,
  * Open connection to the backup server (sync)
  *
  * Returns:
- *  0 ... Sucecss (no prevbious backup)
+ *  0 ... Success (no previous backup)
  *  1 ... Success (found previous backup)
  * -1 ... Error
  */
@@ -128,7 +128,7 @@ int proxmox_backup_connect(struct ProxmoxBackupHandle *handle, char **error);
  * Open connection to the backup server
  *
  * Returns:
- *  0 ... Sucecss (no prevbious backup)
+ *  0 ... Success (no previous backup)
  *  1 ... Success (found previous backup)
  * -1 ... Error
  */
@@ -215,7 +215,7 @@ void proxmox_backup_add_config_async(struct ProxmoxBackupHandle *handle,
  *
  * Returns:
  * -1: on error
- *  0: successful, chunk already exists on server, so it was resued
+ *  0: successful, chunk already exists on server, so it was reused
  *  size: successful, chunk uploaded
  */
 int proxmox_backup_write_data(struct ProxmoxBackupHandle *handle,
@@ -234,11 +234,11 @@ int proxmox_backup_write_data(struct ProxmoxBackupHandle *handle,
  * (only allowed if size == chunk_size)
  *
  * Note: The data pointer needs to be valid until the async
- * opteration is finished.
+ * operation is finished.
  *
  * Returns:
  * -1: on error
- *  0: successful, chunk already exists on server, so it was resued
+ *  0: successful, chunk already exists on server, so it was reused
  *  size: successful, chunk uploaded
  */
 void proxmox_backup_write_data_async(struct ProxmoxBackupHandle *handle,
@@ -293,7 +293,7 @@ void proxmox_backup_finish_async(struct ProxmoxBackupHandle *handle,
 void proxmox_backup_disconnect(struct ProxmoxBackupHandle *handle);
 
 /**
- * DEPRECATED: Connect the the backup server for restore (sync)
+ * DEPRECATED: Connect to the backup server for restore (sync)
  *
  * Deprecated in favor of `proxmox_restore_new_ns` which includes a namespace parameter.
  * Also, it used "lossy" utf8 decoding on the snapshot name which is not the case in the new
@@ -308,7 +308,7 @@ struct ProxmoxRestoreHandle *proxmox_restore_new(const char *repo,
                                                  char **error);
 
 /**
- * Connect the the backup server for restore (sync)
+ * Connect to the backup server for restore (sync)
  */
 struct ProxmoxRestoreHandle *proxmox_restore_new_ns(const char *repo,
                                                     const char *snapshot,
@@ -323,7 +323,7 @@ struct ProxmoxRestoreHandle *proxmox_restore_new_ns(const char *repo,
  * Open connection to the backup server (sync)
  *
  * Returns:
- *  0 ... Sucecss (no prevbious backup)
+ *  0 ... Success (no previous backup)
  * -1 ... Error
  */
 int proxmox_restore_connect(struct ProxmoxRestoreHandle *handle, char **error);
@@ -332,7 +332,7 @@ int proxmox_restore_connect(struct ProxmoxRestoreHandle *handle, char **error);
  * Open connection to the backup server (async)
  *
  * Returns:
- *  0 ... Sucecss (no prevbious backup)
+ *  0 ... Success (no previous backup)
  * -1 ... Error
  */
 void proxmox_restore_connect_async(struct ProxmoxRestoreHandle *handle,
@@ -409,7 +409,7 @@ int proxmox_restore_read_image_at(struct ProxmoxRestoreHandle *handle,
  * of file).
  *
  * Note: The data pointer needs to be valid until the async
- * opteration is finished.
+ * operation is finished.
  *
  * Note: The call will only ever transfer less than 'size' bytes if
  * the end of the file has been reached.
