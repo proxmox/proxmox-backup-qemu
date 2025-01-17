@@ -234,10 +234,16 @@ impl BackupTask {
     pub fn check_incremental(&self, device_name: String, size: u64) -> bool {
         match self.last_manifest() {
             Some(ref manifest) => {
-                check_last_incremental_csum(Arc::clone(manifest), &device_name, size)
+                let archive_name = if let Ok(archive) = archive_name(&device_name) {
+                    archive
+                } else {
+                    return false;
+                };
+
+                check_last_incremental_csum(Arc::clone(manifest), &archive_name, &device_name, size)
                     && check_last_encryption_mode(
                         Arc::clone(manifest),
-                        &device_name,
+                        &archive_name,
                         self.crypt_mode,
                     )
                     && check_last_encryption_key(self.crypt_config.clone())

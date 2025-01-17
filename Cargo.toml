@@ -33,7 +33,7 @@ openssl = "0.10"
 
 proxmox-async = "0.4"
 proxmox-lang = "1"
-proxmox-schema = { version = "3", features = [ "api-macro" ] }
+proxmox-schema = { version = "4", features = [ "api-macro" ] }
 proxmox-sortable-macro = "0.1.2"
 proxmox-sys = "0.6"
 

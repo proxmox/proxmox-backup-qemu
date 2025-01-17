@@ -6,11 +6,11 @@ use std::sync::{Arc, Mutex};
 use futures::future::{Future, TryFutureExt};
 use serde_json::json;
 
-use pbs_api_types::CryptMode;
+use pbs_api_types::{BackupArchiveName, CryptMode, ENCRYPTED_KEY_BLOB_NAME, MANIFEST_BLOB_NAME};
 use pbs_client::{BackupWriter, H2Client, UploadOptions};
 use pbs_datastore::data_blob::DataChunkBuilder;
 use pbs_datastore::index::IndexFile;
-use pbs_datastore::manifest::{BackupManifest, ENCRYPTED_KEY_BLOB_NAME, MANIFEST_BLOB_NAME};
+use pbs_datastore::manifest::BackupManifest;
 use pbs_tools::crypt_config::CryptConfig;
 
 use crate::capi_types::DataPointer;
@@ -112,15 +112,16 @@ pub(crate) async fn add_config(
     let stats = client
         .upload_blob_from_data(data, &blob_name, options)
         .await?;
+    let blob_name: BackupArchiveName = blob_name.parse()?;
 
     let mut guard = manifest.lock().unwrap();
-    guard.add_file(blob_name, stats.size, stats.csum, crypt_mode)?;
+    guard.add_file(&blob_name, stats.size, stats.csum, crypt_mode)?;
 
     Ok(0)
 }
 
-fn archive_name(device_name: &str) -> String {
-    format!("{}.img.fidx", device_name)
+pub(crate) fn archive_name(device_name: &str) -> Result<BackupArchiveName, Error> {
+    format!("{}.img.fidx", device_name).parse()
 }
 
 const CRYPT_CONFIG_HASH_INPUT: &[u8] =
@@ -135,12 +136,13 @@ pub(crate) fn crypt_config_digest(config: Arc<CryptConfig>) -> [u8; 32] {
 
 pub(crate) fn check_last_incremental_csum(
     manifest: Arc<BackupManifest>,
+    archive_name: &BackupArchiveName,
     device_name: &str,
     device_size: u64,
 ) -> bool {
     match PREVIOUS_CSUMS.lock().unwrap().get(device_name) {
         Some(csum) => manifest
-            .verify_file(&archive_name(device_name), csum, device_size)
+            .verify_file(archive_name, csum, device_size)
             .is_ok(),
         None => false,
     }
@@ -148,10 +150,10 @@ pub(crate) fn check_last_incremental_csum(
 
 pub(crate) fn check_last_encryption_mode(
     manifest: Arc<BackupManifest>,
-    device_name: &str,
+    archive_name: &BackupArchiveName,
     crypt_mode: CryptMode,
 ) -> bool {
-    match manifest.lookup_file_info(&archive_name(device_name)) {
+    match manifest.lookup_file_info(archive_name) {
         Ok(file) => match (file.crypt_mode, crypt_mode) {
             (CryptMode::Encrypt, CryptMode::Encrypt) => true,
             (CryptMode::Encrypt, _) => false,
@@ -189,7 +191,7 @@ pub(crate) async fn register_image(
     chunk_size: u64,
     incremental: bool,
 ) -> Result<c_int, Error> {
-    let archive_name = archive_name(&device_name);
+    let archive_name: BackupArchiveName = archive_name(&device_name)?;
 
     let index = match manifest {
         Some(manifest) => {
@@ -326,7 +328,7 @@ pub(crate) async fn close_image(
 
     let mut guard = manifest.lock().unwrap();
     guard.add_file(
-        format!("{}.img.fidx", device_name),
+        &archive_name(&device_name)?,
         device_size,
         upload_result.csum,
         crypt_mode,
@@ -475,21 +477,19 @@ pub(crate) async fn finish_backup(
     manifest: Arc<Mutex<BackupManifest>>,
 ) -> Result<c_int, Error> {
     if let Some(rsa_encrypted_key) = rsa_encrypted_key {
-        let target = ENCRYPTED_KEY_BLOB_NAME;
+        let target = &ENCRYPTED_KEY_BLOB_NAME;
         let options = UploadOptions {
             compress: false,
             encrypt: false,
             ..UploadOptions::default()
         };
         let stats = client
-            .upload_blob_from_data(rsa_encrypted_key, target, options)
+            .upload_blob_from_data(rsa_encrypted_key, &target.to_string(), options)
             .await?;
-        manifest.lock().unwrap().add_file(
-            target.to_string(),
-            stats.size,
-            stats.csum,
-            CryptMode::Encrypt,
-        )?;
+        manifest
+            .lock()
+            .unwrap()
+            .add_file(target, stats.size, stats.csum, CryptMode::Encrypt)?;
     };
 
     let manifest = {
@@ -518,7 +518,11 @@ pub(crate) async fn finish_backup(
     };
 
     client
-        .upload_blob_from_data(manifest.into_bytes(), MANIFEST_BLOB_NAME, options)
+        .upload_blob_from_data(
+            manifest.into_bytes(),
+            &MANIFEST_BLOB_NAME.to_string(),
+            options,
+        )
         .await?;
 
     client.finish().await?;
