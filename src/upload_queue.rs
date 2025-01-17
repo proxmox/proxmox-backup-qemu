@@ -91,7 +91,7 @@ async fn upload_handler(
     let mut digest_list = Vec::new();
     let mut offset_list = Vec::new();
 
-    let index_size = ((device_size + chunk_size - 1) / chunk_size) as usize;
+    let index_size = device_size.div_ceil(chunk_size) as usize;
     let mut index = Vec::with_capacity(index_size);
     index.resize(index_size, [0u8; 32]);
 

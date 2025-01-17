@@ -218,7 +218,7 @@ pub(crate) async fn register_image(
 
             match index {
                 Some(index) => {
-                    let index_size = ((device_size + chunk_size - 1) / chunk_size) as usize;
+                    let index_size = device_size.div_ceil(chunk_size) as usize;
                     if index_size != index.index_count() {
                         bail!("previous backup has different size than current state, cannot do incremental backup (drive: {})", archive_name);
                     }
