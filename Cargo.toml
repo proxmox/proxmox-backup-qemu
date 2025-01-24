@@ -37,7 +37,8 @@ proxmox-schema = { version = "4", features = [ "api-macro" ] }
 proxmox-sortable-macro = "0.1.2"
 proxmox-sys = "0.6"
 
-pbs-api-types  = { path = "submodules/proxmox-backup/pbs-api-types" }
+pbs-api-types  = { version = "0.2" }
+
 pbs-client     = { path = "submodules/proxmox-backup/pbs-client" }
 pbs-datastore  = { path = "submodules/proxmox-backup/pbs-datastore" }
 pbs-key-config = { path = "submodules/proxmox-backup/pbs-key-config" }
