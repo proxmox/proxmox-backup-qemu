@@ -1,3 +1,9 @@
+proxmox-backup-qemu (1.5.0) bookworm; urgency=medium
+
+  * update to PBS 3.3.2 based commit on current git master
+
+ -- Proxmox Support Team <support@proxmox.com>  Fri, 24 Jan 2025 08:29:03 +0100
+
 proxmox-backup-qemu (1.4.1) bookworm; urgency=medium
 
   * update to PBS 3.0.5
