@@ -120,7 +120,7 @@ pub(crate) async fn add_config(
     Ok(0)
 }
 
-pub(crate) fn archive_name(device_name: &str) -> Result<BackupArchiveName, Error> {
+pub(crate) fn archive_name_from_device_name(device_name: &str) -> Result<BackupArchiveName, Error> {
     format!("{}.img.fidx", device_name).parse()
 }
 
@@ -191,7 +191,7 @@ pub(crate) async fn register_image(
     chunk_size: u64,
     incremental: bool,
 ) -> Result<c_int, Error> {
-    let archive_name: BackupArchiveName = archive_name(&device_name)?;
+    let archive_name: BackupArchiveName = archive_name_from_device_name(&device_name)?;
 
     let index = match manifest {
         Some(manifest) => {
@@ -328,7 +328,7 @@ pub(crate) async fn close_image(
 
     let mut guard = manifest.lock().unwrap();
     guard.add_file(
-        &archive_name(&device_name)?,
+        &archive_name_from_device_name(&device_name)?,
         device_size,
         upload_result.csum,
         crypt_mode,

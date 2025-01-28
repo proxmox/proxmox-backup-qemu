@@ -234,7 +234,8 @@ impl BackupTask {
     pub fn check_incremental(&self, device_name: String, size: u64) -> bool {
         match self.last_manifest() {
             Some(ref manifest) => {
-                let archive_name = if let Ok(archive) = archive_name(&device_name) {
+                let archive_name = if let Ok(archive) = archive_name_from_device_name(&device_name)
+                {
                     archive
                 } else {
                     return false;
