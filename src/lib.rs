@@ -8,7 +8,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use proxmox_lang::try_block;
 
-use pbs_api_types::{Authid, BackupDir, BackupNamespace, BackupType, CryptMode};
+use pbs_api_types::{Authid, BackupArchiveName, BackupDir, BackupNamespace, BackupType, CryptMode};
 use pbs_client::BackupRepository;
 
 pub mod capi_types;
@@ -979,6 +979,7 @@ pub extern "C" fn proxmox_restore_image(
     let result: Result<_, Error> = try_block!({
         let archive_name = tools::utf8_c_string(archive_name)?
             .ok_or_else(|| format_err!("archive_name must not be NULL"))?;
+        let archive_name: BackupArchiveName = archive_name.parse()?;
 
         let write_data_callback = move |offset: u64, data: &[u8]| {
             callback(callback_data, offset, data.as_ptr(), data.len() as u64)
@@ -988,7 +989,7 @@ pub extern "C" fn proxmox_restore_image(
             move |offset: u64, len: u64| callback(callback_data, offset, std::ptr::null(), len);
 
         proxmox_async::runtime::block_on(restore_task.restore_image(
-            archive_name,
+            &archive_name,
             write_data_callback,
             write_zero_callback,
             verbose,
@@ -1051,9 +1052,16 @@ pub extern "C" fn proxmox_restore_open_image_async(
 
     param_not_null!(archive_name, callback_info);
     let archive_name = unsafe { tools::utf8_c_string_lossy_non_null(archive_name) };
+    let archive_name = match archive_name.parse() {
+        Ok(archive_name) => archive_name,
+        Err(err) => {
+            callback_info.send_result(Err(err));
+            return;
+        }
+    };
 
     restore_task.runtime().spawn(async move {
-        let result = match restore_task.open_image(archive_name).await {
+        let result = match restore_task.open_image(&archive_name).await {
             Ok(res) => Ok(res as i32),
             Err(err) => Err(err),
         };

@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, format_err, Error};
 use once_cell::sync::OnceCell;
+use pbs_api_types::BackupArchiveName;
 use tokio::runtime::Runtime;
 
 use proxmox_async::runtime::get_runtime_with_builder;
@@ -19,7 +20,6 @@ use pbs_tools::crypt_config::CryptConfig;
 
 use super::BackupSetup;
 use crate::capi_types::DataPointer;
-use crate::commands::archive_name;
 use crate::registry::Registry;
 use crate::shared_cache::get_shared_chunk_cache;
 
@@ -119,12 +119,11 @@ impl RestoreTask {
 
     pub async fn restore_image(
         &self,
-        archive_str: String,
+        archive_name: &BackupArchiveName,
         write_data_callback: impl Fn(u64, &[u8]) -> i32,
         write_zero_callback: impl Fn(u64, u64) -> i32,
         verbose: bool,
     ) -> Result<(), Error> {
-        let archive_name = archive_name(&archive_str)?;
         if verbose {
             eprintln!("download and verify backup index");
         }
@@ -218,8 +217,7 @@ impl RestoreTask {
         Ok(info.archive_size)
     }
 
-    pub async fn open_image(&self, archive_str: String) -> Result<u8, Error> {
-        let archive_name = archive_name(&archive_str)?;
+    pub async fn open_image(&self, archive_name: &BackupArchiveName) -> Result<u8, Error> {
         let client = match self.client.get() {
             Some(reader) => Arc::clone(reader),
             None => bail!("not connected"),
@@ -254,7 +252,7 @@ impl RestoreTask {
 
         let info = ImageAccessInfo {
             archive_size,
-            _archive_name: archive_str,
+            _archive_name: archive_name.to_string(),
             // useful to debug
             reader,
         };
