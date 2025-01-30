@@ -1,3 +1,9 @@
+proxmox-backup-qemu (1.5.1) bookworm; urgency=medium
+
+  * fix archive name handling during restore
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 30 Jan 2025 13:56:38 +0100
+
 proxmox-backup-qemu (1.5.0) bookworm; urgency=medium
 
   * update to PBS 3.3.2 based commit on current git master
