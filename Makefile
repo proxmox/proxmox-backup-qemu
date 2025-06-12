@@ -62,9 +62,8 @@ sbuild: $(DSC)
 	sbuild $<
 
 .PHONY: deb dsc
-deb: $(OTHER_DEBS)
-$(OTHER_DEBS): $(MAIN_DEB)
-$(MAIN_DEB): $(BUILDDIR)
+deb: $(DEBS)
+$(DEBS) &: $(BUILDDIR)
 	cd $(BUILDDIR); dpkg-buildpackage -b -us -uc
 	lintian $(DEBS)
 
