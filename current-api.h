@@ -444,4 +444,4 @@ void proxmox_import_state(const uint8_t *buf, uintptr_t buf_size);
  */
 void proxmox_free_state_buf(uint8_t *buf);
 
-#endif /* PROXMOX_BACKUP_QEMU_H */
+#endif  /* PROXMOX_BACKUP_QEMU_H */
