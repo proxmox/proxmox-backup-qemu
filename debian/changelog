@@ -1,3 +1,9 @@
+proxmox-backup-qemu (2.0.0) trixie; urgency=medium
+
+  * re-build for Debian Trixie based releases.
+
+ -- Proxmox Support Team <support@proxmox.com>  Mon, 16 Jun 2025 14:42:39 +0200
+
 proxmox-backup-qemu (1.5.1) bookworm; urgency=medium
 
   * fix archive name handling during restore
