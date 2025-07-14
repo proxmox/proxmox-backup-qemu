@@ -2,6 +2,7 @@ use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, format_err, Error};
+use futures::StreamExt;
 use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
 
@@ -13,7 +14,7 @@ use pbs_datastore::cached_chunk_reader::CachedChunkReader;
 use pbs_datastore::data_blob::DataChunkBuilder;
 use pbs_datastore::fixed_index::FixedIndexReader;
 use pbs_datastore::index::IndexFile;
-use pbs_datastore::read_chunk::ReadChunk;
+use pbs_datastore::read_chunk::AsyncReadChunk;
 use pbs_datastore::BackupManifest;
 use pbs_key_config::load_and_decrypt_key;
 use pbs_tools::crypt_config::CryptConfig;
@@ -28,6 +29,12 @@ struct ImageAccessInfo {
     _archive_name: String,
     archive_size: u64,
 }
+
+//the default number of buffered futures that concurrently load chunks
+const MAX_BUFFERED_FUTURES: usize = 16;
+
+// the default number of maximum worker threads for tokio
+const MAX_WORKER_THREADS: usize = 4;
 
 pub(crate) struct RestoreTask {
     setup: BackupSetup,
@@ -66,11 +73,17 @@ impl RestoreTask {
     }
 
     pub fn new(setup: BackupSetup) -> Result<Self, Error> {
+        let worker_threads = std::env::var("PBS_RESTORE_MAX_THREADS")
+            .ok()
+            .and_then(|val| val.parse::<usize>().ok())
+            .unwrap_or(MAX_WORKER_THREADS);
+        eprintln!("using up to {worker_threads} threads");
         let runtime = get_runtime_with_builder(|| {
             let mut builder = tokio::runtime::Builder::new_multi_thread();
             builder.enable_all();
+            // we don't use much blocking code, so two should be enough
             builder.max_blocking_threads(2);
-            builder.worker_threads(4);
+            builder.worker_threads(worker_threads);
             builder.thread_name("proxmox-restore-worker");
             builder
         });
@@ -165,26 +178,59 @@ impl RestoreTask {
 
         let start_time = std::time::Instant::now();
 
-        for pos in 0..index.index_count() {
-            let digest = index.index_digest(pos).unwrap();
+        let read_queue = (0..index.index_count()).map(|pos| {
+            let digest = *index.index_digest(pos).unwrap();
             let offset = (pos * index.chunk_size) as u64;
-            if digest == &zero_chunk_digest {
-                let res = write_zero_callback(offset, index.chunk_size as u64);
-                if res < 0 {
-                    bail!("write_zero_callback failed ({})", res);
-                }
-                bytes += index.chunk_size;
-                zeroes += index.chunk_size;
-            } else {
-                let raw_data = ReadChunk::read_chunk(&chunk_reader, digest)?;
-                let res = write_data_callback(offset, &raw_data);
-                if res < 0 {
-                    bail!("write_data_callback failed ({})", res);
-                }
-                bytes += raw_data.len();
+            let chunk_reader = chunk_reader.clone();
+            async move {
+                let chunk = if digest == zero_chunk_digest {
+                    None
+                } else {
+                    let raw_data = tokio::task::spawn(async move {
+                        AsyncReadChunk::read_chunk(&chunk_reader, &digest).await
+                    })
+                    .await??;
+                    Some(raw_data)
+                };
+
+                Ok::<_, Error>((chunk, offset))
             }
+        });
+
+        let concurrency = std::env::var("PBS_RESTORE_FETCH_CONCURRENCY")
+            .ok()
+            .and_then(|val| val.parse::<usize>().ok())
+            .unwrap_or(MAX_BUFFERED_FUTURES);
+        eprintln!("fetching up to {concurrency} chunks in parallel");
+
+        // this buffers futures and pre-fetches some chunks for us
+        let mut stream = futures::stream::iter(read_queue).buffer_unordered(concurrency);
+
+        let mut count = 0;
+        while let Some(res) = stream.next().await {
+            let res = res?;
+            match res {
+                (None, offset) => {
+                    let res = write_zero_callback(offset, index.chunk_size as u64);
+                    if res < 0 {
+                        bail!("write_zero_callback failed ({})", res);
+                    }
+                    bytes += index.chunk_size;
+                    zeroes += index.chunk_size;
+                }
+                (Some(raw_data), offset) => {
+                    let res = write_data_callback(offset, &raw_data);
+                    if res < 0 {
+                        bail!("write_data_callback failed ({})", res);
+                    }
+                    bytes += raw_data.len();
+                }
+            }
+
+            count += 1;
+
             if verbose {
-                let next_per = ((pos + 1) * 100) / index.index_count();
+                let next_per = (count * 100) / index.index_count();
                 if per != next_per {
                     eprintln!(
                         "progress {}% (read {} bytes, zeroes = {}% ({} bytes), duration {} sec)",
