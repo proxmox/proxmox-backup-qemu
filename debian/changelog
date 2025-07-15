@@ -1,3 +1,14 @@
+proxmox-backup-qemu (2.0.1) trixie; urgency=medium
+
+  * restore: make chunk loading concurrent to increase restore bandwidth and
+    reduce total time required.
+    Schedule up to 16 load operations at the same time to increase utilisation
+    of the four available worker threads. The amount of concurrency and the
+    amount of threads can be controlled using the environment variables
+    PBS_RESTORE_FETCH_CONCURRENCY and PBS_RESTORE_MAX_THREADS respectively.
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 15 Jul 2025 21:02:51 +0200
+
 proxmox-backup-qemu (2.0.0) trixie; urgency=medium
 
   * re-build for Debian Trixie based releases.
