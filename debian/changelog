@@ -1,3 +1,16 @@
+proxmox-backup-qemu (1.5.2) bookworm; urgency=medium
+
+  * restore: make chunk loading concurrent to increase restore bandwidth and
+    reduce total time required.
+    Schedule up to 16 load operations at the same time to increase utilisation
+    of the four available worker threads. The amount of concurrency and the
+    amount of threads can be controlled using the environment variables
+    PBS_RESTORE_FETCH_CONCURRENCY and PBS_RESTORE_MAX_THREADS respectively.
+
+  * update to PBS 3.4.3 based commit on current git master
+
+ -- Proxmox Support Team <support@proxmox.com>  Thu, 17 Jul 2025 01:43:42 +0200
+
 proxmox-backup-qemu (1.5.1) bookworm; urgency=medium
 
   * fix archive name handling during restore
