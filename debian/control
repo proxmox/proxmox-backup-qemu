@@ -2,9 +2,9 @@ Source: proxmox-backup-qemu
 Section: admin
 Priority: optional
 Maintainer: Proxmox Support Team <support@proxmox.com>
-Build-Depends: cargo:native,
+Build-Depends: debhelper-compat (= 13),
+               cargo:native,
                cbindgen,
-               debhelper-compat (= 13),
                git,
                librust-anyhow-1+default-dev,
                librust-bincode-1+default-dev,
@@ -99,7 +99,9 @@ Build-Depends: cargo:native,
                librust-xdg-2+default-dev (>= 2.2-~~),
                librust-zstd-0.13+default-dev,
                librust-zstd-safe-7+default-dev,
+               libstd-rust-dev,
                patchelf,
+               rustc:native,
 Standards-Version: 4.6.2
 Homepage: https://www.proxmox.com
 
