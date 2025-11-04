@@ -11,7 +11,7 @@ use proxmox_async::runtime::get_runtime_with_builder;
 use proxmox_sys::fs::file_get_contents;
 
 use pbs_api_types::{BackupType, CryptMode};
-use pbs_client::{BackupWriter, HttpClient, HttpClientOptions};
+use pbs_client::{BackupWriter, BackupWriterOptions, HttpClient, HttpClientOptions};
 use pbs_datastore::BackupManifest;
 use pbs_key_config::{load_and_decrypt_key, rsa_encrypt_key_config, KeyConfig};
 use pbs_tools::crypt_config::CryptConfig;
@@ -145,12 +145,15 @@ impl BackupTask {
             backup_dir.group.ty = BackupType::Vm;
             let writer = BackupWriter::start(
                 &http,
-                self.crypt_config.clone(),
-                &self.setup.store,
-                &self.setup.backup_ns,
-                &backup_dir,
-                false,
-                false,
+                BackupWriterOptions {
+                    datastore: &self.setup.store,
+                    ns: &self.setup.backup_ns,
+                    backup: &backup_dir,
+                    crypt_config: self.crypt_config.clone(),
+                    debug: false,
+                    benchmark: false,
+                    no_cache: false,
+                },
             )
             .await?;
 
