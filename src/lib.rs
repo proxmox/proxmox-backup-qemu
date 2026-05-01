@@ -60,7 +60,7 @@ fn convert_error_to_cstring(err: String) -> CString {
     match CString::new(err) {
         Ok(msg) => msg,
         Err(err) => {
-            eprintln!("got error containung 0 bytes: {}", err);
+            eprintln!("got error containing 0 bytes: {err}");
             CString::new("failed to convert error message containing 0 bytes").unwrap()
         }
     }
@@ -798,7 +798,7 @@ pub extern "C" fn proxmox_restore_new(
             .parse()?;
 
         let password = tools::utf8_c_string(password)?
-            .ok_or_else(|| format_err!("password must not be null"))?;
+            .ok_or_else(|| format_err!("password must not be NULL"))?;
         let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
         let key_password = tools::utf8_c_string(key_password)?;
         let fingerprint = tools::utf8_c_string(fingerprint)?;
@@ -858,7 +858,7 @@ pub extern "C" fn proxmox_restore_new_ns(
             .parse()?;
 
         let password = tools::utf8_c_string(password)?
-            .ok_or_else(|| format_err!("password must not be null"))?;
+            .ok_or_else(|| format_err!("password must not be NULL"))?;
         let keyfile = tools::utf8_c_string(keyfile)?.map(std::path::PathBuf::from);
         let key_password = tools::utf8_c_string(key_password)?;
         let fingerprint = tools::utf8_c_string(fingerprint)?;
