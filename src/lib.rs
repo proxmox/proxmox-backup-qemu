@@ -1176,11 +1176,24 @@ pub extern "C" fn proxmox_restore_read_image_at_async(
 #[no_mangle]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn proxmox_export_state(buf_size: *mut usize) -> *mut u8 {
-    let data = commands::serialize_state().into_boxed_slice();
-    unsafe {
-        *buf_size = data.len();
+    let data = commands::serialize_state();
+    let len = data.len();
+    // Allocate via libc::malloc so the matching free in proxmox_free_state_buf
+    // does not need to know the layout used by Rust's global allocator.
+    let buf = unsafe { libc::malloc(len) } as *mut u8;
+    if buf.is_null() {
+        if !buf_size.is_null() {
+            unsafe { *buf_size = 0 };
+        }
+        return ptr::null_mut();
     }
-    Box::leak(data).as_mut_ptr()
+    unsafe {
+        std::ptr::copy_nonoverlapping(data.as_ptr(), buf, len);
+        if !buf_size.is_null() {
+            *buf_size = len;
+        }
+    }
+    buf
 }
 
 /// Load state serialized by proxmox_export_state. If loading fails, a message
@@ -1201,7 +1214,7 @@ pub extern "C" fn proxmox_import_state(buf: *const u8, buf_size: usize) {
 pub extern "C" fn proxmox_free_state_buf(buf: *mut u8) {
     if !buf.is_null() {
         unsafe {
-            drop(Box::from_raw(buf));
+            libc::free(buf as *mut std::os::raw::c_void);
         }
     }
 }
