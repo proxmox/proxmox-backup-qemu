@@ -191,6 +191,10 @@ pub(crate) async fn register_image(
     chunk_size: u64,
     incremental: bool,
 ) -> Result<c_int, Error> {
+    // QEMU clears the dirty bitmap before closing the image. If that close fails or is skipped, a
+    // cached checksum would make the next backup miss writes made before this one started.
+    let previous_csum = PREVIOUS_CSUMS.lock().unwrap().remove(&device_name);
+
     let archive_name: BackupArchiveName = archive_name_from_device_name(&device_name)?;
 
     let index = match manifest {
@@ -211,9 +215,7 @@ pub(crate) async fn register_image(
     let mut initial_index = Arc::new(None);
 
     if incremental {
-        let csum = PREVIOUS_CSUMS.lock().unwrap().get(&device_name).copied();
-
-        if let Some(csum) = csum {
+        if let Some(csum) = previous_csum {
             param["reuse-csum"] = hex::encode(csum).into();
 
             match index {
