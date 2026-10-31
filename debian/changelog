@@ -1,3 +1,16 @@
+proxmox-backup-qemu (2.0.4) trixie; urgency=medium
+
+  * backup: read disks in full when the previous backup failed. If finishing a
+    disk's backup failed, or was skipped because another disk had failed, an
+    incremental backup could otherwise miss changes made between the last
+    successful backup and the failed one.
+
+  * update Proxmox Backup Server submodule to 4.2.8. This includes a fix for an
+    out-of-bounds memory access when reading a fixed index file with a crafted
+    header, which could crash QEMU during a restore or an incremental backup.
+
+ -- Proxmox Support Team <support@proxmox.com>  Sat, 31 Oct 2026 17:14:04 +0100
+
 proxmox-backup-qemu (2.0.3) trixie; urgency=medium
 
   * update Proxmox Backup Server submodule to current master based on 4.2.6
