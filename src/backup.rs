@@ -111,23 +111,28 @@ impl BackupTask {
         self.runtime.handle().clone()
     }
 
-    fn check_aborted(&self) -> Result<(), Error> {
+    /// Subscribe to the abort notification, or fail if the task was already aborted.
+    ///
+    /// Subscribing before the check ensures that a command either fails here or gets notified, as
+    /// abort() sets the state before notifying.
+    fn abort_receiver(&self) -> Result<tokio::sync::broadcast::Receiver<()>, Error> {
+        let abort_rx = self.abort.subscribe();
         if self.aborted.get().is_some() {
             bail!("task already aborted");
         }
-        Ok(())
+        Ok(abort_rx)
     }
 
     pub fn abort(&self, reason: String) {
+        let _ = self.aborted.set(reason);
         if self.abort.send(()).is_err() {
             // should not happen, but log to stderr
             eprintln!("BackupTask send abort failed.");
         }
-        let _ = self.aborted.set(reason);
     }
 
     pub async fn connect(&self) -> Result<c_int, Error> {
-        self.check_aborted()?;
+        let mut abort_rx = self.abort_receiver()?;
 
         let command_future = async {
             let options = HttpClientOptions::new_non_interactive(
@@ -173,7 +178,6 @@ impl BackupTask {
             Ok(result)
         };
 
-        let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
 
@@ -185,7 +189,7 @@ impl BackupTask {
     }
 
     pub async fn add_config(&self, name: String, data: Vec<u8>) -> Result<c_int, Error> {
-        self.check_aborted()?;
+        let mut abort_rx = self.abort_receiver()?;
 
         let command_future = add_config(
             self.need_writer()?,
@@ -196,7 +200,6 @@ impl BackupTask {
             self.crypt_mode,
         );
 
-        let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
 
@@ -207,7 +210,7 @@ impl BackupTask {
         offset: u64,
         size: u64,
     ) -> Result<c_int, Error> {
-        self.check_aborted()?;
+        let mut abort_rx = self.abort_receiver()?;
 
         let command_future = write_data(
             self.need_writer()?,
@@ -226,7 +229,6 @@ impl BackupTask {
             self.compress,
         );
 
-        let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
 
@@ -262,7 +264,7 @@ impl BackupTask {
         size: u64,
         incremental: bool,
     ) -> Result<c_int, Error> {
-        self.check_aborted()?;
+        let mut abort_rx = self.abort_receiver()?;
 
         let command_future = register_image(
             self.need_writer()?,
@@ -277,12 +279,11 @@ impl BackupTask {
             incremental,
         );
 
-        let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
 
     pub async fn close_image(&self, dev_id: u8) -> Result<c_int, Error> {
-        self.check_aborted()?;
+        let mut abort_rx = self.abort_receiver()?;
 
         let command_future = close_image(
             self.need_writer()?,
@@ -292,12 +293,11 @@ impl BackupTask {
             self.crypt_mode,
         );
 
-        let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
 
     pub async fn finish(&self) -> Result<c_int, Error> {
-        self.check_aborted()?;
+        let mut abort_rx = self.abort_receiver()?;
 
         let command_future = finish_backup(
             self.need_writer()?,
@@ -306,7 +306,6 @@ impl BackupTask {
             Arc::clone(&self.manifest),
         );
 
-        let mut abort_rx = self.abort.subscribe();
         abortable_command(command_future, abort_rx.recv()).await
     }
 }
